@@ -35,7 +35,7 @@ use crate::vm::virtualizer::virtualize;
 // call rax (call run function with ptr to machine struct)
 
 
-use exe::{Buffer, CCharString, Error, ImageSectionHeader, NTHeadersMut, PE, PEType, SectionCharacteristics, VecPE};
+use exe::{Buffer, CCharString, Error, ImageSectionHeader, NTHeadersMut, PE, PEType, RVA, SectionCharacteristics, VecPE};
 
 fn main() {
     // "../reddeadonline/target/x86_64-pc-windows-msvc/release-lto/loader.exe"
@@ -62,16 +62,24 @@ fn main() {
     // todo place all the bytecode into the bytecode section for every virtualized code part
     // in this case it would just be data
 
+    let mut vm_file = VecPE::from_disk_file("resources/target/x86_64-pc-windows-msvc/release/vm.dll").unwrap();
+    let vm_file_text = vm_file.get_section_by_name(".text").unwrap().clone();
+    let machine_entry = vm_file.get_entrypoint().unwrap();
+    println!("vm machine::new: {:x}", machine_entry.0);
+
+    let machine = vm_file.read(vm_file_text.data_offset(pefile.get_type()), vm_file_text.size_of_raw_data as _)
+        .unwrap();
+
     let mut vm_section = ImageSectionHeader::default();
     vm_section.set_name(Some(".vm"));
-    vm_section.virtual_size = 0x1000;
-    vm_section.size_of_raw_data = data.len() as u32;
+    vm_section.virtual_size = 0x7530;
+    vm_section.size_of_raw_data = machine.len() as u32;
     vm_section.characteristics = SectionCharacteristics::MEM_EXECUTE
         | SectionCharacteristics::MEM_READ
         | SectionCharacteristics::CNT_CODE;
 
     // todo include compiled machine into vm section (look independent shellcode maybe as reference)
-    let vm_section = add_section(&mut pefile, &vm_section, &data.to_vec()).unwrap();
+    let vm_section = add_section(&mut pefile, &vm_section, &machine.to_vec()).unwrap();
 
     // todo generate code that replaces original code (in this case there is none)
     // via dynasm referring to bytecode section with offset and to vm section
@@ -84,7 +92,7 @@ fn main() {
     assert!(nt_headers.is_ok());
 
     if let NTHeadersMut::NTHeaders64(nt_headers_64) = nt_headers.unwrap() {
-        nt_headers_64.optional_header.address_of_entry_point = vm_section.virtual_address;
+        nt_headers_64.optional_header.address_of_entry_point = RVA(vm_section.virtual_address.0 + machine_entry.0 - 0x1000);
     }
 
     //
