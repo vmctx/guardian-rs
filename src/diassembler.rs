@@ -19,7 +19,7 @@ impl Disassembler {
         use iced_x86::{Decoder, DecoderOptions, Formatter, Instruction, NasmFormatter};
 
         let mut decoder =
-            Decoder::new(EXAMPLE_CODE_BITNESS, &self.bytes, DecoderOptions::NONE);
+            Decoder::with_ip(EXAMPLE_CODE_BITNESS, &self.bytes, 0, DecoderOptions::NONE);
 
         // Formatters: Masm*, Nasm*, Gas* (AT&T) and Intel* (XED).
         // For fastest code, see `SpecializedFormatter` which is ~3.3x faster. Use it if formatting
@@ -55,7 +55,7 @@ impl Disassembler {
             print!("{:016X} ", instruction.ip());
             let start_index = (instruction.ip()) as usize;
             let instr_bytes = &self.bytes[start_index..start_index + instruction.len()];
-            /*
+
              for b in instr_bytes.iter() {
                 print!("{:02X}", b);
             }
@@ -65,9 +65,9 @@ impl Disassembler {
                 }
             }
             println!(" {}", output);
-            */
 
-            println!("{}", disassemble(&virtualize(instr_bytes)).unwrap());
+
+            //println!("{}", disassemble(&virtualize(instr_bytes)).unwrap());
         }
     }
 }

@@ -69,6 +69,7 @@ impl Virtualizer {
     fn virtualize_inst(&mut self, inst: &Instruction) {
         match inst.mnemonic() {
             Mnemonic::Mov => self.mov(inst),
+            Mnemonic::Movzx => self.movzx(inst),
             Mnemonic::Imul => self.imul(inst),
             Mnemonic::Ret => self.ret(),
             Mnemonic::Push => self.push(inst),
@@ -82,6 +83,13 @@ impl Virtualizer {
     }
 
     fn mov(&mut self, inst: &Instruction) {
+        vmasm!(self,
+            load_operand inst, 1;
+            store_operand inst, 0;
+        );
+    }
+
+    fn movzx(&mut self, inst: &Instruction) {
         vmasm!(self,
             load_operand inst, 1;
             store_operand inst, 0;
