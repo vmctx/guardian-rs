@@ -99,7 +99,7 @@ pub struct Machine {
     pc: *const u8,
     sp: *mut u64,
     pub regs: [u64; 16],
-    program: *const u8,
+    program: *const u8, // for testing replace this with the array
     program_size: usize,
     vmstack: [u64; 0x1000],
     cpustack: [u64; 0x1000],
@@ -111,7 +111,8 @@ impl Machine {
     #[no_mangle]
     pub unsafe extern "C" fn new(program: *const u8, size: usize) -> Self {
         use iced_x86::code_asm::*;
-
+        // fails at
+        // mov     [rsp+10518h+var_10440], rcx
         let mut m = Self {
             pc: core::ptr::null(),
             sp: core::ptr::null_mut(),
@@ -144,6 +145,15 @@ impl Machine {
             (&r15, Register::R15.into()),
         ];
 
+        // thanks to cursey <3 :3 ^-^ >~<
+        // remove this, place it into main.rs or something
+        // wat i mean is pre assemble the vmenter and vmexit
+        // instead of assembling it here
+        // so i also dont need to allocate the regions
+        // they will be stack/ in data section / in bytecode section
+        // allocated maybe, to test just get the output from this code below
+        // and replace vmenter and vmexit with the arrays
+        // check in pe-bear for relocations!!
         let mut a = CodeAssembler::new(64).unwrap();
 
         a.mov(rax, &m as *const _ as u64).unwrap();
@@ -163,10 +173,9 @@ impl Machine {
         a.mov(rsp, vm_rsp).unwrap();
 
         a.mov(rcx, rax).unwrap();
-        a.mov(rax, Self::run as u64).unwrap(); // TODO translate to assembly.unwrap() probably or patch into target binary
+        a.mov(rax, Self::run as u64).unwrap();
         a.jmp(rax).unwrap();
 
-        // TODO this is what gets patched into the target file
         let insts = a.assemble(m.vmenter.as_ptr::<u64>() as u64).unwrap();
 
         unsafe {
@@ -191,6 +200,7 @@ impl Machine {
             (&r15, Register::R15.into()),
         ];
 
+        // look above, same applies here
         let mut a = CodeAssembler::new(64).unwrap();
 
         // Restore the GPRs
