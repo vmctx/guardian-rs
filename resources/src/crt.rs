@@ -72,9 +72,10 @@ unsafe extern "C" fn memset(s: *mut u8, c: u8, n: usize) -> *mut u8 {
     mini_memset(s, c, n)
 }
 
-
 #[no_mangle]
 pub extern "C" fn __CxxFrameHandler3() {}
 
 #[no_mangle]
-pub extern "C" fn __chkstk() -> i32 { 0 }
+unsafe extern "fastcall" fn __chkstk(stack_size: u32)  {
+    asm!("mov rax, {}", in(reg) stack_size);
+}

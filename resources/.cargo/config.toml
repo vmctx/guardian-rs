@@ -16,6 +16,7 @@ rustflags = [
     "-C", "link-arg=/OPT:NOREF",
     #"-C", "link-arg=/OPT:REF,ICF",
     "-C", "link-arg=/SAFESEH:NO",
+    "-C", "link-arg=/LTCG:OFF",
     #"-C", "link-arg=/INTEGRITYCHECK"
     "-C", "link-arg=/DEBUG:NONE",
     "-C", "link-arg=/MERGE:.rdata=.text",

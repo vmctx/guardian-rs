@@ -72,7 +72,7 @@ fn main() {
 
     let mut vm_section = ImageSectionHeader::default();
     vm_section.set_name(Some(".vm"));
-    vm_section.virtual_size = 0x7530;
+    vm_section.virtual_size = 0x7530; // 30kb, vm is 26kb
     vm_section.size_of_raw_data = machine.len() as u32;
     vm_section.characteristics = SectionCharacteristics::MEM_EXECUTE
         | SectionCharacteristics::MEM_READ
