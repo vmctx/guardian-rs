@@ -8,11 +8,12 @@ rustflags = [
     #"-Z", "pre-link-arg=/NXCOMPAT",
     "-Z", "pre-link-arg=/NODEFAULTLIB",
     "-Z", "pre-link-arg=/SUBSYSTEM:NATIVE",
-
+    #"-Z", "pre-link-arg=/DYNAMICBASE",
     #"-Z", "pre-link-arg=/MANIFEST:NO",
 
     # Post Link Args
-    "-C", "link-arg=/ENTRY:new",
+    "-C", "relocation-model=pie",
+    "-C", "link-arg=/ENTRY:vm",
     "-C", "link-arg=/OPT:NOREF",
     #"-C", "link-arg=/OPT:REF,ICF",
     "-C", "link-arg=/SAFESEH:NO",

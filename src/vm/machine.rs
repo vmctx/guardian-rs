@@ -75,14 +75,14 @@ impl From<iced_x86::Register> for Register {
     }
 }
 pub struct Machine {
-    pc: *const u8,
-    sp: *mut u64,
+    pub(crate) pc: *const u8,
+    pub(crate) sp: *mut u64,
     pub regs: [u64; 16],
-    program: Vec<u8>,
-    vmstack: Vec<u64>,
-    cpustack: Vec<u8>,
+    pub(crate) program: Vec<u8>,
+    pub(crate) vmstack: Vec<u64>,
+    pub(crate) cpustack: Vec<u8>,
     pub vmenter: region::Allocation,
-    vmexit: region::Allocation,
+    pub(crate) vmexit: region::Allocation,
 }
 
 impl Machine {

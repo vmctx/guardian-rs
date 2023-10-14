@@ -6,10 +6,8 @@ use alloc::vec::Vec;
 use core::mem::size_of;
 use core::convert::TryFrom;
 use core::ptr::slice_from_raw_parts;
-use libc_alloc::LibcAlloc;
-
-#[global_allocator]
-static ALLOCATOR: LibcAlloc = LibcAlloc;
+use alloc::vec;
+use core::arch::asm;
 
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
@@ -18,6 +16,12 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
 
 mod crt;
 mod region;
+mod vm;
+mod syscalls;
+
+#[global_allocator]
+static ALLOCATOR: allocator::Allocator = allocator::Allocator;
+mod allocator;
 
 use memoffset::offset_of;
 
@@ -33,240 +37,108 @@ pub enum Opcode {
     Vmexit,
 }
 
-#[repr(u8)]
-#[derive(num_enum::IntoPrimitive)]
-pub enum Register {
-    Rax,
-    Rcx,
-    Rdx,
-    Rbx,
-    Rsp,
-    Rbp,
-    Rsi,
-    Rdi,
-    R8,
-    R9,
-    R10,
-    R11,
-    R12,
-    R13,
-    R14,
-    R15,
-}
-
-impl From<iced_x86::Register> for Register {
-    fn from(reg: iced_x86::Register) -> Self {
-        match reg {
-            iced_x86::Register::RAX => Register::Rax,
-            iced_x86::Register::RCX => Register::Rcx,
-            iced_x86::Register::RDX => Register::Rdx,
-            iced_x86::Register::RBX => Register::Rbx,
-            iced_x86::Register::RSP => Register::Rsp,
-            iced_x86::Register::RBP => Register::Rbp,
-            iced_x86::Register::RSI => Register::Rsi,
-            iced_x86::Register::RDI => Register::Rdi,
-            iced_x86::Register::R8 => Register::R8,
-            iced_x86::Register::R9 => Register::R9,
-            iced_x86::Register::R10 => Register::R10,
-            iced_x86::Register::R11 => Register::R11,
-            iced_x86::Register::R12 => Register::R12,
-            iced_x86::Register::R13 => Register::R13,
-            iced_x86::Register::R14 => Register::R14,
-            iced_x86::Register::R15 => Register::R15,
-            iced_x86::Register::EAX => Register::Rax,
-            iced_x86::Register::ECX => Register::Rcx,
-            iced_x86::Register::EDX => Register::Rdx,
-            iced_x86::Register::EBX => Register::Rbx,
-            iced_x86::Register::ESP => Register::Rsp,
-            iced_x86::Register::EBP => Register::Rbp,
-            iced_x86::Register::ESI => Register::Rsi,
-            iced_x86::Register::EDI => Register::Rdi,
-            iced_x86::Register::R8D => Register::R8,
-            iced_x86::Register::R9D => Register::R9,
-            iced_x86::Register::R10D => Register::R10,
-            iced_x86::Register::R11D => Register::R11,
-            iced_x86::Register::R12D => Register::R12,
-            iced_x86::Register::R13D => Register::R13,
-            iced_x86::Register::R14D => Register::R14,
-            iced_x86::Register::R15D => Register::R15,
-            _ => panic!("unsupported register"),
-        }
-    }
-}
-
 #[repr(C)]
 pub struct Machine {
-    pc: *const u8,
-    sp: *mut u64,
+    pub(crate) pc: *const u8,
+    pub(crate) sp: *mut u64,
     pub regs: [u64; 16],
-    program: *const u8, // for testing replace this with the array
-    program_size: usize,
-    vmstack: [u64; 0x1000],
-    cpustack: [u64; 0x1000],
-    pub vmenter: region::Allocation,
-    vmexit: region::Allocation,
+    pub(crate) program: [u8; 166],
+    pub(crate) vmstack: Vec<u64>,
+    pub(crate) cpustack: Vec<u8>,
 }
 
 impl Machine {
     #[no_mangle]
-    pub unsafe extern "C" fn new(program: *const u8, size: usize) -> Self {
-        use iced_x86::code_asm::*;
-        // fails at
-        // mov     [rsp+10518h+var_10440], rcx
+    #[inline(never)]
+    pub unsafe extern "C" fn vm() {
         let mut m = Self {
             pc: core::ptr::null(),
             sp: core::ptr::null_mut(),
             regs: [0; 16],
-            program,
-            program_size: size,
-            vmstack: [0; 0x1000],
-            cpustack: [0; 0x1000],
-            vmenter: region::alloc(0x1000, region::Protection::READ_WRITE_EXECUTE).unwrap(),
-            vmexit: region::alloc(0x1000, region::Protection::READ_WRITE_EXECUTE).unwrap(),
+            program:  [5, 0, 96, 0, 0, 0, 0, 0, 0, 0, 3, 1, 5, 0, 120, 0, 0, 0, 0, 0,
+                0, 0, 3, 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 2, 5, 0, 120,
+                0, 0, 0, 0, 0, 0, 0, 3, 1, 0, 8, 0, 0, 0, 0, 0, 0,
+                0, 3, 1, 5, 0, 88, 0, 0, 0, 0, 0, 0, 0, 3, 2, 5, 0, 120,
+                0, 0, 0, 0, 0, 0, 0, 3, 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 1,
+                5, 0, 88, 0, 0, 0, 0, 0, 0, 0, 3, 1, 4, 5, 0, 88, 0, 0, 0, 0,
+                0, 0, 0, 3, 2, 5, 0, 120, 0, 0, 0, 0, 0, 0, 0, 3, 1, 1, 5, 0, 120,
+                0, 0, 0, 0, 0, 0, 0, 3, 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 5, 0, 120,
+                0, 0, 0, 0, 0, 0, 0, 3, 2, 6],
+            vmstack: vec![0; 0x1000],
+            cpustack: vec![0; 0x1000],
         };
 
-        // Generate VMENTER.
-        let regmap: &[(&AsmRegister64, u8)] = &[
-            (&rax, Register::Rax.into()),
-            (&rcx, Register::Rcx.into()),
-            (&rdx, Register::Rdx.into()),
-            (&rbx, Register::Rbx.into()),
-            (&rsp, Register::Rsp.into()),
-            (&rbp, Register::Rbp.into()),
-            (&rsi, Register::Rsi.into()),
-            (&rdi, Register::Rdi.into()),
-            (&r8, Register::R8.into()),
-            (&r9, Register::R9.into()),
-            (&r10, Register::R10.into()),
-            (&r11, Register::R11.into()),
-            (&r12, Register::R12.into()),
-            (&r13, Register::R13.into()),
-            (&r14, Register::R14.into()),
-            (&r15, Register::R15.into()),
-        ];
-
-        // thanks to cursey <3 :3 ^-^ >~<
-        // remove this, place it into main.rs or something
-        // wat i mean is pre assemble the vmenter and vmexit
-        // instead of assembling it here
-        // so i also dont need to allocate the regions
-        // they will be stack/ in data section / in bytecode section
-        // allocated maybe, to test just get the output from this code below
-        // and replace vmenter and vmexit with the arrays
-        // check in pe-bear for relocations!!
-        let mut a = CodeAssembler::new(64).unwrap();
-
-        a.mov(rax, &m as *const _ as u64).unwrap();
-
-        // Store the GPRs
-        for (reg, regid) in regmap.iter() {
-            let offset = offset_of!(Machine, regs) + *regid as usize * 8;
-            a.mov(qword_ptr(rax + offset), **reg).unwrap();
-        }
-
-        // Switch to the VM's CPU stack.
         let vm_rsp = unsafe {
             m.cpustack
                 .as_ptr()
-                .add(m.cpustack.len() - 0x100 - size_of::<u64>()) as u64
-        };
-        a.mov(rsp, vm_rsp).unwrap();
-
-        a.mov(rcx, rax).unwrap();
-        a.mov(rax, Self::run as u64).unwrap();
-        a.jmp(rax).unwrap();
-
-        let insts = a.assemble(m.vmenter.as_ptr::<u64>() as u64).unwrap();
-
-        unsafe {
-            core::ptr::copy(insts.as_ptr(), m.vmenter.as_mut_ptr(), insts.len());
+                .add(m.cpustack.len() - 0x100 - core::mem::size_of::<u64>()) as u64
         };
 
-        // Generate VMEXIT.
-        let regmap: &[(&AsmRegister64, u8)] = &[
-            (&rax, Register::Rax.into()),
-            (&rbx, Register::Rbx.into()),
-            (&rsp, Register::Rsp.into()),
-            (&rbp, Register::Rbp.into()),
-            (&rsi, Register::Rsi.into()),
-            (&rdi, Register::Rdi.into()),
-            (&r8, Register::R8.into()),
-            (&r9, Register::R9.into()),
-            (&r10, Register::R10.into()),
-            (&r11, Register::R11.into()),
-            (&r12, Register::R12.into()),
-            (&r13, Register::R13.into()),
-            (&r14, Register::R14.into()),
-            (&r15, Register::R15.into()),
-        ];
-
-        // look above, same applies here
-        let mut a = CodeAssembler::new(64).unwrap();
-
-        // Restore the GPRs
-        for (reg, regid) in regmap.iter() {
-            let offset = offset_of!(Machine, regs) + *regid as usize * 8;
-            a.mov(**reg, qword_ptr(rcx + offset)).unwrap();
-        }
-
-        a.jmp(rdx).unwrap();
-
-        let insts = a.assemble(m.vmexit.as_ptr::<u64>() as u64).unwrap();
-
-        unsafe {
-            core::ptr::copy(insts.as_ptr(), m.vmexit.as_mut_ptr(), insts.len());
-        };
-
-        m
+        let vmenter: extern "C" fn(&mut Machine, u64, u64) =
+            core::mem::transmute(vm::vmenter as *const usize as usize);
+        // todo this might be in the wrong order in asm file idk
+        // setting the stack def works i checked that
+        vmenter(&mut m, run as *const u64 as u64, vm_rsp)
     }
-
     // TODO to make this useable static in a patched binary, i have to translate the
     // program to assembly like in the machine::new function
     // this is currently JIT (just in time) have to translate to
     // AOT (Ahead of time) but idk if that makes sense because then its
     // literally the same as if its not virtualized like what urgh
     // gotta check virtualizer protector projects to understand
-    #[allow(clippy::missing_safety_doc)]
-    pub unsafe extern "C" fn run(&mut self) {
-        let program = slice_from_raw_parts(self.program, self.program_size).as_ref().unwrap();
+}
 
-        self.pc = program.as_ptr();
-        self.sp = self.vmstack.as_mut_ptr();
+#[allow(clippy::missing_safety_doc)]
+#[no_mangle]
+pub unsafe extern "C" fn run(machine: *mut Machine) {
+    let machine = machine.as_mut().unwrap();
 
-        while self.pc < program.as_ptr_range().end {
-            let op = Opcode::try_from(*self.pc).unwrap();
-            self.pc = self.pc.add(1);
+    machine.pc = machine.program.as_ptr();
+    machine.sp = machine.vmstack.as_mut_ptr();
 
-            match op {
-                Opcode::Const => {
-                    *self.sp.add(1) = *(self.pc as *const u64);
-                    self.sp = self.sp.add(1);
-                    self.pc = self.pc.add(size_of::<u64>());
-                }
-                Opcode::Load => *self.sp = *(*self.sp as *const u64),
-                Opcode::Store => {
-                    *(*self.sp as *mut u64) = *self.sp.sub(1);
-                    self.sp = self.sp.sub(2);
-                }
-                Opcode::Add => {
-                    *self.sp.sub(1) = (*self.sp.sub(1)).wrapping_add(*self.sp);
-                    self.sp = self.sp.sub(1);
-                }
-                Opcode::Mul => {
-                    *self.sp.sub(1) = (*self.sp.sub(1)).wrapping_mul(*self.sp);
-                    self.sp = self.sp.sub(1);
-                }
-                Opcode::Vmctx => {
-                    *self.sp.add(1) = self as *const _ as u64;
-                    self.sp = self.sp.add(1);
-                }
-                Opcode::Vmexit => {
-                    let exit_ip = *self.sp;
-                    self.sp = self.sp.sub(1);
-                    let vmexit: extern "C" fn(&mut Machine, u64) =
-                        core::mem::transmute(self.vmexit.as_ptr::<()>());
-                    vmexit(self, exit_ip);
-                }
+    while machine.pc < machine.program.as_ptr_range().end {
+        // unwrap doesnt panic but endless loops
+        // i was passing unvirtualized instructions BUT
+        // verify that asm is correct tmrw TODO
+        // causes? asm is fcked up maybe
+        // aka argument order
+        let op = Opcode::try_from(*machine.pc).unwrap();
+        machine.pc = machine.pc.add(1);
+
+        /* TODO crashes at
+        case 1:
+        **((_QWORD **)a1 + 1) = ***((_QWORD ***)a1 + 1);
+        */
+
+        match op {
+            Opcode::Const => {
+                *machine.sp.add(1) = *(machine.pc as *const u64);
+                machine.sp = machine.sp.add(1);
+                machine.pc = machine.pc.add(size_of::<u64>());
+            }
+            Opcode::Load => *machine.sp = *(*machine.sp as *const u64),
+            Opcode::Store => {
+                *(*machine.sp as *mut u64) = *machine.sp.sub(1);
+                machine.sp = machine.sp.sub(2);
+            }
+            Opcode::Add => {
+                *machine.sp.sub(1) = (*machine.sp.sub(1)).wrapping_add(*machine.sp);
+                machine.sp = machine.sp.sub(1);
+            }
+            Opcode::Mul => {
+                *machine.sp.sub(1) = (*machine.sp.sub(1)).wrapping_mul(*machine.sp);
+                machine.sp = machine.sp.sub(1);
+            }
+            Opcode::Vmctx => {
+                *machine.sp.add(1) = machine as *const _ as u64;
+                machine.sp = machine.sp.add(1);
+            }
+            Opcode::Vmexit => {
+                let exit_ip = *machine.sp;
+                machine.sp = machine.sp.sub(1);
+                let vmexit: extern "C" fn(&mut Machine, u64) =
+                    core::mem::transmute(vm::vmexit as *const usize as usize);
+                vmexit(machine, exit_ip);
             }
         }
     }

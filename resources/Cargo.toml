@@ -6,19 +6,15 @@ build = "build.rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-libc_alloc = "1.0.5"
 libc = { version = "0.2.149", default-features = false }
 bitflags = "2.4.0"
 anyhow = { version = "1.0", default-features = false }
 num_enum = { version = "0.6.1", default-features = false }
 memoffset = "0.9.0"
-syscalls = {path = "../../reddeadonline/crates/syscalls"}
+syscalls = {path = "../../reddeadonline/crates/syscalls", default-features =  false, features = ["direct"]}
 #
-[dependencies.iced-x86]
-version = "1.20.0"
-default-features = false
-features = ["no_std", "intel", "decoder", "nasm", "code_asm"]
-
+winapi = { version = "0.3.9", default-features = false, features = ["ntdef", "basetsd", "winnt"] }
+ntapi = { version = "0.4.0", default-features = false }
 [lib]
 crate-type = ["cdylib"]
 
@@ -27,6 +23,8 @@ panic = "abort"
 
 [profile.release]
 panic = "abort"
+# produce pdb with this, and remove debug:none in config.toml
+# debug = true
 opt-level = "z"
 lto = true
 codegen-units = 1
