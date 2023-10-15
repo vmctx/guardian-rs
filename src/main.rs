@@ -165,10 +165,9 @@ pub struct VmMachine {
     pub(crate) pc: *const u8,
     pub(crate) sp: *mut u64,
     pub regs: [u64; 16],
-    program: *const u8, // for testing replace this with the array
-    program_size: usize,
-    vmstack: [u64; 0x200],
-    cpustack: [u8; 0x200],
+    pub(crate) program: [u8; 166],
+    pub(crate) vmstack: Vec<u64>,
+    pub(crate) cpustack: Vec<u8>,
     vmenter: [u8; 88],
     vmexit: [u8; 64],
 }
@@ -178,10 +177,9 @@ fn create_machine(program_ptr: u64, program_len: usize) -> VmMachine {
         pc: std::ptr::null(),
         sp: std::ptr::null_mut(),
         regs: [0; 16],
-        program: program_ptr as _,
-        program_size: program_len,
-        vmstack: [0; 0x200],
-        cpustack: [0; 0x200],
+        program: [0; 166],
+        vmstack: [0; 0x1000].to_vec(),
+        cpustack: [0; 0x1000].to_vec(),
         vmenter: [0; 88],
         vmexit: [0; 64],
     }
@@ -236,8 +234,9 @@ fn generate_vm_entry(m: &mut VmMachine, machine_addr: u64, run_addr: usize) -> V
             .add(m.cpustack.len() - 0x100 - std::mem::size_of::<u64>()) as u64
     };
     */
+    // this wouldnt work since i have to get a ptr to the inner buf of vec
     let vm_rsp = qword_ptr(
-        rax + offset_of!(VmMachine, cpustack) + m.cpustack.len() - std::mem::size_of::<u64>()
+        rax + offset_of!(VmMachine, cpustack) + m.cpustack.len() - 0x100 - std::mem::size_of::<u64>()
     );
 
     a.mov(rsp, vm_rsp).unwrap();

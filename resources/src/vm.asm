@@ -2,6 +2,7 @@
 .global vmexit
 
 vmenter:
+    // &mut Machine
     mov     rax, rcx
     mov     [rax + 0x10], rax
     mov     [rax + 0x18], rcx
@@ -19,10 +20,13 @@ vmenter:
     mov     [rax + 0x78], r13
     mov     [rax + 0x80], r14
     mov     [rax + 0x88], r15
-    // offset_of!(Machine, cpustack) + cpustack.len - 0x100 - std::mem::size_of::<u64>();
-    mov     rsp,          rsi
+    // offset_of!(Machine, cpustack) + m.cpustack.len() - 0x100 - std::mem::size_of::<u64>();
+    mov     rsp,          r8
+    // &mut Machine
     mov     rcx,          rax
+    // run fn ptr
     mov     rax,          rdx
+    // run(&mut Machine);
     jmp     rax
 
 vmexit:

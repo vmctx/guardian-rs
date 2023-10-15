@@ -76,16 +76,8 @@ impl Machine {
 
         let vmenter: extern "C" fn(&mut Machine, u64, u64) =
             core::mem::transmute(vm::vmenter as *const usize as usize);
-        // todo this might be in the wrong order in asm file idk
-        // setting the stack def works i checked that
         vmenter(&mut m, run as *const u64 as u64, vm_rsp)
     }
-    // TODO to make this useable static in a patched binary, i have to translate the
-    // program to assembly like in the machine::new function
-    // this is currently JIT (just in time) have to translate to
-    // AOT (Ahead of time) but idk if that makes sense because then its
-    // literally the same as if its not virtualized like what urgh
-    // gotta check virtualizer protector projects to understand
 }
 
 #[allow(clippy::missing_safety_doc)]
@@ -106,8 +98,18 @@ pub unsafe extern "C" fn run(machine: *mut Machine) {
         machine.pc = machine.pc.add(1);
 
         /* TODO crashes at
-        case 1:
-        **((_QWORD **)a1 + 1) = ***((_QWORD ***)a1 + 1);
+        case 2: aka Opcode::Store
+        rax = 8
+        rcx = 0
+        jmp hello_world_modded.7FF773D6756B
+        mov rax,qword ptr ds:[rsi+8]
+        mov rcx,qword ptr ds:[rax-8]
+        mov rax,qword ptr ds:[rax]
+        mov qword ptr ds:[rax],rcx
+
+        **(_QWORD **)a1[1] = *(_QWORD *)(a1[1] - 8i64);
+        a1[1] -= 16i64;
+        break;
         */
 
         match op {
