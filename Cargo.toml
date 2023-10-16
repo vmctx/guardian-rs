@@ -1,24 +1,18 @@
-[package]
-name = "obfuscator"
-version = "0.1.0"
-edition = "2021"
+[workspace]
+resolver = "2"
+members = [
+"obfuscator",
+"resources"
+]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-clap = "4.3.19"
-# virtualizer
-region = "3.0.0"
-anyhow = "1.0.56"
-num_enum = "0.6.1"
-memoffset = "0.9.0"
-#
-exe = "0.5.6"
-dynasm = "2.0.0"
 [profile.dev]
+panic = "abort"
 debug-assertions = false
 
-
-[dependencies.iced-x86]
-version = "1.20.0"
-features = ["decoder", "nasm", "code_asm"]
+[profile.release]
+panic = "abort"
+# produce pdb with this, and remove debug:none in config.toml
+# debug = true
+opt-level = "z"
+lto = true
+codegen-units = 1

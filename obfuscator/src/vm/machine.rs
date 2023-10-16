@@ -74,6 +74,7 @@ impl From<iced_x86::Register> for Register {
         }
     }
 }
+
 pub struct Machine {
     pub(crate) pc: *const u8,
     pub(crate) sp: *mut u64,
