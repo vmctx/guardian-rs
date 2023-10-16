@@ -198,7 +198,6 @@ impl Machine {
     // literally the same as if its not virtualized like what urgh
     // gotta check virtualizer protector projects to understand
     #[allow(clippy::missing_safety_doc)]
-    #[no_mangle]
     pub unsafe extern "C" fn run(&mut self) {
         self.pc = self.program.as_ptr();
         self.sp = self.vmstack.as_mut_ptr();
