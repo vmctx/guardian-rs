@@ -1,5 +1,3 @@
-use core::arch::asm;
-
 use libc::c_void;
 
 #[allow(non_snake_case)]

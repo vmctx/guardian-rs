@@ -266,6 +266,7 @@ mod tests {
         let m = Machine::new(&virtualize(SHELLCODE)).unwrap();
         let f: extern "C" fn(i32) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
         assert_eq!(f(2), 4);
+        assert_eq!(f(2), 4);
     }
 
     #[test]

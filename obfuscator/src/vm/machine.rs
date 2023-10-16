@@ -1,5 +1,6 @@
 use anyhow::Result;
 use std::mem::size_of;
+use std::ptr::{read_unaligned, write_unaligned};
 use memoffset::offset_of;
 
 #[repr(u8)]
@@ -75,6 +76,7 @@ impl From<iced_x86::Register> for Register {
     }
 }
 
+#[repr(C)]
 pub struct Machine {
     pub(crate) pc: *const u8,
     pub(crate) sp: *mut u64,
@@ -196,6 +198,7 @@ impl Machine {
     // literally the same as if its not virtualized like what urgh
     // gotta check virtualizer protector projects to understand
     #[allow(clippy::missing_safety_doc)]
+    #[no_mangle]
     pub unsafe extern "C" fn run(&mut self) {
         self.pc = self.program.as_ptr();
         self.sp = self.vmstack.as_mut_ptr();
@@ -206,29 +209,35 @@ impl Machine {
 
             match op {
                 Opcode::Const => {
-                    *self.sp.add(1) = *(self.pc as *const u64);
+                    write_unaligned(self.sp.add(1), read_unaligned(self.pc as *const u64));
                     self.sp = self.sp.add(1);
                     self.pc = self.pc.add(size_of::<u64>());
                 }
                 Opcode::Load => *self.sp = *(*self.sp as *const u64),
                 Opcode::Store => {
-                    *(*self.sp as *mut u64) = *self.sp.sub(1);
+                    write_unaligned(*self.sp as *mut u64, read_unaligned(self.sp.sub(1)));
                     self.sp = self.sp.sub(2);
                 }
                 Opcode::Add => {
-                    *self.sp.sub(1) = (*self.sp.sub(1)).wrapping_add(*self.sp);
+                    write_unaligned(
+                        self.sp.sub(1),
+                        read_unaligned(self.sp.sub(1)).wrapping_add(read_unaligned(self.sp)),
+                    );
                     self.sp = self.sp.sub(1);
                 }
                 Opcode::Mul => {
-                    *self.sp.sub(1) = (*self.sp.sub(1)).wrapping_mul(*self.sp);
+                    write_unaligned(
+                        self.sp.sub(1),
+                        read_unaligned(self.sp.sub(1)).wrapping_mul(read_unaligned(self.sp)),
+                    );
                     self.sp = self.sp.sub(1);
                 }
                 Opcode::Vmctx => {
-                    *self.sp.add(1) = self as *const _ as u64;
+                    write_unaligned(self.sp.add(1), self as *const _ as u64);
                     self.sp = self.sp.add(1);
                 }
                 Opcode::Vmexit => {
-                    let exit_ip = *self.sp;
+                    let exit_ip = read_unaligned(self.sp);
                     self.sp = self.sp.sub(1);
                     let vmexit: extern "C" fn(&mut Machine, u64) =
                         std::mem::transmute(self.vmexit.as_ptr::<()>());
@@ -300,7 +309,8 @@ pub fn disassemble(program: &[u8]) -> Result<String> {
         #[allow(clippy::single_match)]
         match op {
             Opcode::Const => unsafe {
-                let v = *(pc as *const u64);
+                //let v = *(pc as *const u64);
+                let v = read_unaligned(pc as *const u64);
                 pc = pc.add(size_of::<u64>());
                 s.push_str(format!(" {}", v).as_str());
             },
@@ -312,7 +322,6 @@ pub fn disassemble(program: &[u8]) -> Result<String> {
 
     Ok(s)
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;

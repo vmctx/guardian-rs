@@ -57,7 +57,7 @@ fn main() {
 
     let data: Vec<u8> = virtualize(&[  0x89, 0x4c, 0x24, 0x08, 0x8b, 0x44, 0x24, 0x08, 0x0f, 0xaf, 0x44, 0x24, 0x08, 0xc2, 0x00,
         0x00,]);
-    println!("{}", disassemble(&data).unwrap());
+    println!("{:?}", &data);
 
     let m = Machine::new(&data).unwrap();
     let f: extern "C" fn(i32) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
