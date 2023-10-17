@@ -89,6 +89,7 @@ impl Virtualizer {
         );
     }
 
+    // todo
     fn movzx(&mut self, inst: &Instruction) {
         vmasm!(self,
             load_operand inst, 1;
