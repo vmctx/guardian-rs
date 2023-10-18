@@ -11,6 +11,7 @@ pub enum Opcode {
     Store,
     Add,
     Sub,
+    Div,
     Mul,
     Vmctx,
     Vmexit,
@@ -207,6 +208,7 @@ impl Machine {
             let op = Opcode::try_from(*self.pc).unwrap();
             self.pc = self.pc.add(1);
 
+            // todo rflags
             match op {
                 Opcode::Const => {
                     write_unaligned(self.sp.add(1), read_unaligned(self.pc as *const u64));
@@ -230,7 +232,15 @@ impl Machine {
                         self.sp.sub(1),
                         read_unaligned(self.sp.sub(1)).wrapping_sub(read_unaligned(self.sp)),
                     );
-                    // todo zf and cf flag
+
+                    self.sp = self.sp.sub(1);
+                },
+                Opcode::Div => {
+                    write_unaligned(
+                        self.sp.sub(1),
+                        read_unaligned(self.sp.sub(1)).wrapping_div(read_unaligned(self.sp)),
+                    );
+
                     self.sp = self.sp.sub(1);
                 },
                 Opcode::Mul => {
@@ -287,6 +297,10 @@ impl Assembler {
         self.emit(Opcode::Sub);
     }
 
+    pub fn div(&mut self) {
+        self.emit(Opcode::Div);
+    }
+
     pub fn mul(&mut self) {
         self.emit(Opcode::Mul);
     }
@@ -341,19 +355,19 @@ mod tests {
     #[test]
     fn assembler_and_machine() {
         let mut a = Assembler::default();
-        let x = 2u64;
-        let y = 3u64;
+        let x = 8u64;
+        let y = 2u64;
         let mut z = 0u64;
 
         a.const_(&x as *const _ as u64);
         a.load();
         a.const_(&y as *const _ as u64);
         a.load();
-        a.add();
+        a.div();
         a.const_(&mut z as *mut _ as u64);
         a.store();
 
         unsafe { Machine::new(&a.assemble()).unwrap().run() };
-        assert_eq!(z, 5);
+        assert_eq!(z, 4);
     }
 }

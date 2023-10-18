@@ -8,6 +8,7 @@ trait Asm {
     fn store(&mut self);
     fn add(&mut self);
     fn sub(&mut self);
+    fn div(&mut self);
     fn mul(&mut self);
     fn vmctx(&mut self);
     fn vmexit(&mut self);
@@ -35,15 +36,28 @@ trait Asm {
 /// Just like we were handwriting assembly in a .asm file.
 macro_rules! vmasm {
     (
-        $a:ident,
+        $self:ident,
         $($inst:ident $($operand:expr),* );* $(;)*
     ) => {{
         $(
             Asm::$inst(
-                $a,
+                $self,
                 $($operand),*
             );
         )*
+    }}
+}
+
+macro_rules! binary_op {
+    ($self:ident, $inst:ident, $op:ident) => {{
+        assert_eq!($inst.op_count(), 2);
+
+        vmasm!($self,
+            load_operand $inst, 1;
+            load_operand $inst, 0;
+            $op;
+            store_operand $inst, 0;
+        );
     }}
 }
 
@@ -116,14 +130,17 @@ impl Virtualizer {
         self.asm.assemble()
     }
 
+    // todo set flags in interpreter
     fn virtualize_inst(&mut self, inst: &Instruction) {
         match inst.mnemonic() {
             Mnemonic::Mov => self.mov(inst),
             Mnemonic::Movzx => self.movzx(inst),
             Mnemonic::Add => self.add(inst),
-            // dont forget zf and cf flag
             Mnemonic::Sub => self.sub(inst),
-            Mnemonic::Imul => self.imul(inst),
+            Mnemonic::Div => self.div(inst),
+            Mnemonic::Idiv => self.div(inst),
+            Mnemonic::Mul => self.mul(inst),
+            Mnemonic::Imul => self.mul(inst),
             Mnemonic::Ret => self.ret(),
             Mnemonic::Push => self.push(inst),
             Mnemonic::Pop => self.pop(inst),
@@ -151,36 +168,19 @@ impl Virtualizer {
     }
 
     fn add(&mut self, inst: &Instruction) {
-        assert_eq!(inst.op_count(), 2);
-
-        vmasm!(self,
-            load_operand inst, 1;
-            load_operand inst, 0;
-            add;
-            store_operand inst, 0;
-        );
+        binary_op!(self, inst, add);
     }
 
     fn sub(&mut self, inst: &Instruction) {
-        assert_eq!(inst.op_count(), 2);
-
-        vmasm!(self,
-            load_operand inst, 1;
-            load_operand inst, 0;
-            sub;
-            store_operand inst, 0;
-        );
+        binary_op!(self, inst, sub);
     }
 
-    fn imul(&mut self, inst: &Instruction) {
-        assert_eq!(inst.op_count(), 2);
+    fn div(&mut self, inst: &Instruction) {
+        binary_op!(self, inst, div);
+    }
 
-        vmasm!(self,
-            load_operand inst, 1;
-            load_operand inst, 0;
-            mul;
-            store_operand inst, 0;
-        );
+    fn mul(&mut self, inst: &Instruction) {
+        binary_op!(self, inst, mul);
     }
 
     fn ret(&mut self) {
@@ -247,6 +247,10 @@ impl Asm for Virtualizer {
 
     fn sub(&mut self) {
         self.asm.sub();
+    }
+
+    fn div(&mut self) {
+        self.asm.div();
     }
 
     fn mul(&mut self) {
