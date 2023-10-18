@@ -202,8 +202,8 @@ impl Virtualizer {
 
         vmasm!(self,
             load_reg RSP;
-            const_ unsafe { std::mem::transmute(-8i64) };
-            add;
+            const_ 8;
+            sub;
             store_reg RSP;
 
             load_operand inst, 0;
@@ -362,6 +362,19 @@ mod tests {
         let m = Machine::new(&virtualize(&a.assemble(0).unwrap())).unwrap();
         let f: extern "C" fn(i32) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
         assert_eq!(f(8), 16);
+    }
+
+    #[test]
+    #[cfg(target_env = "msvc")]
+    fn assembler_push_pop_virtualizer_and_machine() {
+        use iced_x86::code_asm::*;
+        let mut a = CodeAssembler::new(64).unwrap();
+        a.push(rcx).unwrap();
+        a.pop(rax).unwrap();
+        a.ret().unwrap();
+        let m = Machine::new(&virtualize(&a.assemble(0).unwrap())).unwrap();
+        let f: extern "C" fn(i32) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        assert_eq!(f(8), 8);
     }
 
     #[test]
