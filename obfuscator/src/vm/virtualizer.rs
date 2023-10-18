@@ -58,6 +58,28 @@ impl Virtualizer {
         }
     }
 
+    /*
+    fn virtualize(program: &[u8]) -> Vec<u8>
+    let mut virtualized = Vec::new();
+    if inst == jmp
+        let flattened = flatten_control_flow(&program, &jmp);
+        virtualized append virtualize(&flattened);
+        else blabla do the others
+
+    fn flatten_ctf(program and jmp) -> Vec<u8>
+    let mut flattened = Vec::new();
+    if jmp.addr > virtualized_code_start && jmp.addr < virtualized_code_end
+        // jmp dest is inside virtualized code
+        disassemble jmp dest label until next jmp and add instructions to
+        flattened vec
+            if next_jmp.addr > jmp.addr
+            // next jmp addr is not start of loop/original jmp instr
+            flattened append flatten_ctf(program, next_jmp)
+        else if next_jmp.addr is jmp.location
+            break
+    ret flattened
+    // after the control flow is flattened virtualize returned instructions
+     */
     pub fn virtualize(&mut self, program: &[u8]) -> Vec<u8> {
         let mut decoder = Decoder::new(64, program, 0);
 
