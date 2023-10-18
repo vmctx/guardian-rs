@@ -270,12 +270,15 @@ pub unsafe extern "C" fn run(machine: *mut Machine) {
 
     while machine.pc < machine.program.as_ptr_range().end {
         let op = Opcode::try_from(*machine.pc).unwrap();
+        // increase program counter by one byte
+        // for const, this will load the address
         machine.pc = machine.pc.add(1);
 
         match op {
             Opcode::Const => {
                 write_unaligned(machine.sp.add(1), read_unaligned(machine.pc as *const u64));
                 machine.sp = machine.sp.add(1);
+                // increase program counter to skip value (8 bytes)
                 machine.pc = machine.pc.add(size_of::<u64>());
             }
             Opcode::Load => *machine.sp = *(*machine.sp as *const u64),
@@ -298,6 +301,7 @@ pub unsafe extern "C" fn run(machine: *mut Machine) {
                 machine.sp = machine.sp.sub(1);
             }
             Opcode::Vmctx => {
+                // pushes machine ptr on the stack
                 write_unaligned(machine.sp.add(1), machine as *const _ as u64);
                 machine.sp = machine.sp.add(1);
             }

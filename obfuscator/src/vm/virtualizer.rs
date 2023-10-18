@@ -7,6 +7,7 @@ trait Asm {
     fn load(&mut self);
     fn store(&mut self);
     fn add(&mut self);
+    fn sub(&mut self);
     fn mul(&mut self);
     fn vmctx(&mut self);
     fn vmexit(&mut self);
@@ -38,7 +39,8 @@ macro_rules! vmasm {
         $($inst:ident $($operand:expr),* );* $(;)*
     ) => {{
         $(
-            $a.$inst(
+            Asm::$inst(
+                $a,
                 $($operand),*
             );
         )*
@@ -70,6 +72,9 @@ impl Virtualizer {
         match inst.mnemonic() {
             Mnemonic::Mov => self.mov(inst),
             Mnemonic::Movzx => self.movzx(inst),
+            Mnemonic::Add => self.add(inst),
+            // dont forget zf and cf flag
+            Mnemonic::Sub => self.sub(inst),
             Mnemonic::Imul => self.imul(inst),
             Mnemonic::Ret => self.ret(),
             Mnemonic::Push => self.push(inst),
@@ -93,6 +98,28 @@ impl Virtualizer {
     fn movzx(&mut self, inst: &Instruction) {
         vmasm!(self,
             load_operand inst, 1;
+            store_operand inst, 0;
+        );
+    }
+
+    fn add(&mut self, inst: &Instruction) {
+        assert_eq!(inst.op_count(), 2);
+
+        vmasm!(self,
+            load_operand inst, 1;
+            load_operand inst, 0;
+            add;
+            store_operand inst, 0;
+        );
+    }
+
+    fn sub(&mut self, inst: &Instruction) {
+        assert_eq!(inst.op_count(), 2);
+
+        vmasm!(self,
+            load_operand inst, 1;
+            load_operand inst, 0;
+            sub;
             store_operand inst, 0;
         );
     }
@@ -168,6 +195,10 @@ impl Asm for Virtualizer {
 
     fn add(&mut self) {
         self.asm.add();
+    }
+
+    fn sub(&mut self) {
+        self.asm.sub();
     }
 
     fn mul(&mut self) {
@@ -261,13 +292,24 @@ mod tests {
     #[cfg(target_env = "msvc")]
     fn virtualizer_and_machine() {
         const SHELLCODE: &[u8] = &[
-            0x89, 0x4c, 0x24, 0x08, 0x8b, 0x44, 0x24, 0x08, 0x0f, 0xaf, 0x44, 0x24, 0x08, 0xc2, 0x00,
-            0x00,
+            0x89, 0x4c, 0x24, 0x08, 0x8b, 0x44, 0x24, 0x08, 0x0f, 0xaf, 0x44, 0x24, 0x08, 0xc3
         ];
         let m = Machine::new(&virtualize(SHELLCODE)).unwrap();
         let f: extern "C" fn(i32) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
         assert_eq!(f(2), 4);
-        assert_eq!(f(2), 4);
+    }
+
+    #[test]
+    #[cfg(target_env = "msvc")]
+    fn assembler_virtualizer_and_machine() {
+        use iced_x86::code_asm::*;
+        let mut a = CodeAssembler::new(64).unwrap();
+        a.mov(rax, rcx).unwrap();
+        a.add(rax, rax).unwrap();
+        a.ret().unwrap();
+        let m = Machine::new(&virtualize(&a.assemble(0).unwrap())).unwrap();
+        let f: extern "C" fn(i32) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        assert_eq!(f(8), 16);
     }
 
     #[test]
