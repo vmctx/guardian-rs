@@ -80,8 +80,34 @@ impl Virtualizer {
     ret flattened
     // after the control flow is flattened virtualize returned instructions
      */
+    // option 2 with labels
+    // label + target addr maps to program counter
+    /*
+    fn virtualize(program: &[u8]) -> Vec<u8>
+        let mut virtualized = Vec::new();
+        let mut label list array
+        if inst == jmp
+            emit label jmp.addr
+            emit opcode jmp
+            emit jmp.target
+        else blabla do the others
+
+    interpreter loop
+        loop through and map all labels
+        to program counters (instruction ptrs)
+        while opcode != Vmexit
+            if opcode jmp
+                // set program counter to jmp target label
+                set pc to label_mapping.get(*((jmp+ 1) as *const u64))
+
+            else the rest blabla
+    */
     pub fn virtualize(&mut self, program: &[u8]) -> Vec<u8> {
-        let mut decoder = Decoder::new(64, program, 0);
+        self.virtualize_with_ip(0, program)
+    }
+
+    pub fn virtualize_with_ip(&mut self, ip: u64, program: &[u8]) -> Vec<u8> {
+        let mut decoder = Decoder::with_ip(64, program, ip, 0);
 
         for inst in &mut decoder {
             self.virtualize_inst(&inst);
@@ -304,6 +330,10 @@ impl Asm for Virtualizer {
 
 pub fn virtualize(program: &[u8]) -> Vec<u8> {
     Virtualizer::new().virtualize(program)
+}
+
+pub fn virtualize_with_ip(ip: u64, program: &[u8]) -> Vec<u8> {
+    Virtualizer::new().virtualize_with_ip(ip, program)
 }
 
 #[cfg(test)]

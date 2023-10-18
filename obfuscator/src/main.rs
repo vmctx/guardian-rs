@@ -7,7 +7,7 @@ use std::mem::size_of_val;
 
 use crate::diassembler::Disassembler;
 use crate::vm::machine::{disassemble, Machine, Register};
-use crate::vm::virtualizer::virtualize;
+use crate::vm::virtualizer::{virtualize, virtualize_with_ip};
 
 // virtualization of code that is in between a call of function like begin_virtualization and end_virtualization
 // which are imported from a stub dll, the code is virtualized, a machine is created from the virtual code and the
@@ -55,7 +55,10 @@ fn main() {
     // "../reddeadonline/target/x86_64-pc-windows-msvc/release-lto/loader.exe"
     let mut pefile = VecPE::from_disk_file("../hello_world/target/release/hello_world.exe").unwrap();
 
-    let data: Vec<u8> = virtualize(&[  0x89, 0x4c, 0x24, 0x08, 0x8b, 0x44, 0x24, 0x08, 0x0f, 0xaf, 0x44, 0x24, 0x08, 0xc2, 0x00,
+    // relocating will probably be done dynamically
+    // have to mark them as relocate somehow
+    // but for jmps i need to be able to identify label with target
+    let data: Vec<u8> = virtualize_with_ip(0000000180000000, &[  0x89, 0x4c, 0x24, 0x08, 0x8b, 0x44, 0x24, 0x08, 0x0f, 0xaf, 0x44, 0x24, 0x08, 0xc2, 0x00,
         0x00,]);
     println!("{:?}", &data);
 
