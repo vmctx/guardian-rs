@@ -6,7 +6,7 @@ use std::fs;
 use std::mem::size_of_val;
 
 use crate::diassembler::Disassembler;
-use crate::vm::machine::{disassemble, Machine, Register};
+use crate::vm::machine::{Assembler, disassemble, Machine, Register};
 use crate::vm::virtualizer::{virtualize, virtualize_with_ip};
 
 // virtualization of code that is in between a call of function like begin_virtualization and end_virtualization
@@ -41,6 +41,21 @@ use iced_x86::code_asm::AsmRegister64;
 use memoffset::offset_of;
 
 fn main() {
+    let mut a = Assembler::default();
+    let x = 8u64;
+    let y = 8u64;
+    let mut z = 0u64;
+
+    a.const_(&x as *const _ as u64);
+    a.load();
+    a.const_(&y as *const _ as u64);
+    a.load();
+    a.sub();
+    a.const_(&mut z as *mut _ as u64);
+    a.store();
+
+    unsafe { Machine::new(&a.assemble()).unwrap().run() };
+    assert_eq!(z, 4);
     #[repr(C)]
     pub struct TestMachine {
         pub(crate) pc: *const u8,

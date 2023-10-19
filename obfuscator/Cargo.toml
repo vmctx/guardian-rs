@@ -15,6 +15,7 @@ memoffset = "0.9.0"
 #
 exe = "0.5.6"
 dynasm = "2.0.0"
+x86 = "0.52.0"
 
 [dependencies.iced-x86]
 version = "1.20.0"

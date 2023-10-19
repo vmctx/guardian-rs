@@ -2,15 +2,24 @@
 #![no_main]
 extern crate alloc;
 
-use alloc::vec::Vec;
-use core::mem::size_of;
-use core::convert::TryFrom;
 use alloc::vec;
+use alloc::vec::Vec;
+use core::convert::TryFrom;
+use core::mem::size_of;
 use core::ptr::{read_unaligned, write_unaligned};
-use assembler::prelude::{Reg64::*, Reg32::*};
-use assembler::Reg64;
+
+use memoffset::offset_of;
+use winapi::ctypes::c_void;
+use x86::bits64::rflags::RFlags;
+
 use assembler::Asm;
+use assembler::prelude::{Reg32::*, Reg64::*};
 use assembler::prelude::Mov;
+use assembler::Reg64;
+
+use crate::assembler::{Imm64, Reg32};
+use crate::assembler::prelude::Jmp;
+use crate::syscalls::NtAllocateVirtualMemory;
 
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
@@ -18,21 +27,16 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
 }
 
 mod crt;
-mod region;
-mod vm;
+// mod region;
+// mod vm;
 mod syscalls;
+#[allow(dead_code)]
 mod assembler;
 
 #[global_allocator]
 static ALLOCATOR: allocator::Allocator = allocator::Allocator;
 
 mod allocator;
-
-use memoffset::offset_of;
-use winapi::ctypes::c_void;
-use crate::assembler::{Imm64, Reg32};
-use crate::assembler::prelude::Jmp;
-use crate::syscalls::NtAllocateVirtualMemory;
 
 #[repr(u8)]
 #[derive(Debug, num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
@@ -41,6 +45,8 @@ pub enum Opcode {
     Load,
     Store,
     Add,
+    Sub,
+    Div,
     Mul,
     Vmctx,
     Vmexit,
@@ -113,11 +119,29 @@ impl From<Reg32> for Register {
     }
 }
 
+macro_rules! binary_op {
+    ($self:ident, $op:ident) => {{
+        let result = read_unaligned($self.sp.sub(1)).$op(read_unaligned($self.sp));
+
+        let rflags = x86::bits64::rflags::read();
+        $self.rflags.set(RFlags::FLAGS_ZF, rflags.contains(RFlags::FLAGS_ZF));
+        $self.rflags.set(RFlags::FLAGS_CF, rflags.contains(RFlags::FLAGS_CF));
+
+        write_unaligned(
+            $self.sp.sub(1),
+            result,
+        );
+
+        $self.sp = $self.sp.sub(1);
+    }}
+}
+
 #[repr(C)]
 pub struct Machine {
     pub(crate) pc: *const u8,
     pub(crate) sp: *mut u64,
     pub regs: [u64; 16],
+    pub rflags: RFlags,
     pub(crate) program: [u8; 166],
     pub(crate) vmstack: Vec<u64>,
     pub(crate) cpustack: Vec<u8>,
@@ -132,6 +156,7 @@ impl Machine {
             pc: core::ptr::null(),
             sp: core::ptr::null_mut(),
             regs: [0; 16],
+            rflags: RFlags::new(),
             program: [5, 0, 24, 0, 0, 0, 0, 0, 0, 0, 3, 1, 5, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 2, 5, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 1, 5, 0, 16, 0, 0, 0, 0, 0, 0, 0, 3, 2, 5, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 1, 5, 0, 16, 0, 0, 0, 0, 0, 0, 0, 3, 1, 4, 5, 0, 16, 0, 0, 0, 0, 0, 0, 0, 3, 2, 5, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 1, 1, 5, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 5, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 2, 6],
             vmstack: vec![0; 0x1000],
             cpustack: vec![0; 0x1000],
@@ -286,20 +311,10 @@ pub unsafe extern "C" fn run(machine: *mut Machine) {
                 write_unaligned(*machine.sp as *mut u64, read_unaligned(machine.sp.sub(1)));
                 machine.sp = machine.sp.sub(2);
             }
-            Opcode::Add => {
-                write_unaligned(
-                    machine.sp.sub(1),
-                    read_unaligned(machine.sp.sub(1)).wrapping_add(read_unaligned(machine.sp)),
-                );
-                machine.sp = machine.sp.sub(1);
-            }
-            Opcode::Mul => {
-                write_unaligned(
-                    machine.sp.sub(1),
-                    read_unaligned(machine.sp.sub(1)).wrapping_mul(read_unaligned(machine.sp)),
-                );
-                machine.sp = machine.sp.sub(1);
-            }
+            Opcode::Add => binary_op!(machine, wrapping_add),
+            Opcode::Sub => binary_op!(machine, wrapping_sub),
+            Opcode::Div => binary_op!(machine, wrapping_div),
+            Opcode::Mul => binary_op!(machine, wrapping_mul),
             Opcode::Vmctx => {
                 // pushes machine ptr on the stack
                 write_unaligned(machine.sp.add(1), machine as *const _ as u64);

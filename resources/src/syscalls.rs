@@ -1,11 +1,7 @@
-use ntapi::ntpsapi::THREADINFOCLASS;
 use core::arch::global_asm;
-use winapi::ctypes::c_void;
-use winapi::shared::basetsd::{PSIZE_T, SIZE_T, ULONG_PTR};
-use winapi::shared::ntdef::{
-    BOOLEAN, HANDLE, NTSTATUS, PHANDLE, PLARGE_INTEGER, POBJECT_ATTRIBUTES, PULONG, PVOID, ULONG,
+use winapi::shared::basetsd::{PSIZE_T, ULONG_PTR};
+use winapi::shared::ntdef::{HANDLE, NTSTATUS, PULONG, PVOID, ULONG,
 };
-use winapi::um::winnt::ACCESS_MASK;
 
 // https://j00ru.vexillium.org/syscalls/nt/64/
 extern "C" {

@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::mem::size_of;
 use std::ptr::{read_unaligned, write_unaligned};
 use memoffset::offset_of;
+use x86::bits64::rflags::RFlags;
 
 #[repr(u8)]
 #[derive(Debug, num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
@@ -78,11 +79,29 @@ impl From<iced_x86::Register> for Register {
     }
 }
 
+macro_rules! binary_op {
+    ($self:ident, $op:ident) => {{
+        let result = read_unaligned($self.sp.sub(1)).$op(read_unaligned($self.sp));
+
+        let rflags = x86::bits64::rflags::read();
+        $self.rflags.set(RFlags::FLAGS_ZF, rflags.contains(RFlags::FLAGS_ZF));
+        $self.rflags.set(RFlags::FLAGS_CF, rflags.contains(RFlags::FLAGS_CF));
+
+        write_unaligned(
+            $self.sp.sub(1),
+            result,
+        );
+
+        $self.sp = $self.sp.sub(1);
+    }}
+}
+
 #[repr(C)]
 pub struct Machine {
     pub(crate) pc: *const u8,
     pub(crate) sp: *mut u64,
     pub regs: [u64; 16],
+    pub rflags: RFlags,
     pub(crate) program: Vec<u8>,
     pub(crate) vmstack: Vec<u64>,
     pub(crate) cpustack: Vec<u8>,
@@ -100,6 +119,7 @@ impl Machine {
             pc: std::ptr::null(),
             sp: std::ptr::null_mut(),
             regs: [0; 16],
+            rflags: RFlags::new(),
             program: program.to_vec(),
             vmstack: [0; 0x1000].to_vec(),
             cpustack: [0; 0x1000].to_vec(),
@@ -208,7 +228,6 @@ impl Machine {
             let op = Opcode::try_from(*self.pc).unwrap();
             self.pc = self.pc.add(1);
 
-            // todo rflags
             match op {
                 Opcode::Const => {
                     write_unaligned(self.sp.add(1), read_unaligned(self.pc as *const u64));
@@ -219,37 +238,11 @@ impl Machine {
                 Opcode::Store => {
                     write_unaligned(*self.sp as *mut u64, read_unaligned(self.sp.sub(1)));
                     self.sp = self.sp.sub(2);
-                },
-                Opcode::Add => {
-                    write_unaligned(
-                        self.sp.sub(1),
-                        read_unaligned(self.sp.sub(1)).wrapping_add(read_unaligned(self.sp)),
-                    );
-                    self.sp = self.sp.sub(1);
-                },
-                Opcode::Sub => {
-                    write_unaligned(
-                        self.sp.sub(1),
-                        read_unaligned(self.sp.sub(1)).wrapping_sub(read_unaligned(self.sp)),
-                    );
-
-                    self.sp = self.sp.sub(1);
-                },
-                Opcode::Div => {
-                    write_unaligned(
-                        self.sp.sub(1),
-                        read_unaligned(self.sp.sub(1)).wrapping_div(read_unaligned(self.sp)),
-                    );
-
-                    self.sp = self.sp.sub(1);
-                },
-                Opcode::Mul => {
-                    write_unaligned(
-                        self.sp.sub(1),
-                        read_unaligned(self.sp.sub(1)).wrapping_mul(read_unaligned(self.sp)),
-                    );
-                    self.sp = self.sp.sub(1);
                 }
+                Opcode::Add => binary_op!(self, wrapping_add),
+                Opcode::Sub => binary_op!(self, wrapping_sub),
+                Opcode::Div => binary_op!(self, wrapping_div),
+                Opcode::Mul => binary_op!(self, wrapping_mul),
                 Opcode::Vmctx => {
                     write_unaligned(self.sp.add(1), self as *const _ as u64);
                     self.sp = self.sp.add(1);
@@ -348,6 +341,7 @@ pub fn disassemble(program: &[u8]) -> Result<String> {
 
     Ok(s)
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;

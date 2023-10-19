@@ -1,8 +1,5 @@
 use libc::c_void;
 
-#[allow(non_snake_case)]
-pub type size_t = usize;
-
 extern "C" {
     fn mini_memcpy(
         dest: *mut c_void,
