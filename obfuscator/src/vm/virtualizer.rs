@@ -116,6 +116,24 @@ impl Virtualizer {
 
             else the rest blabla
     */
+    // idea 3, better option 2
+    /*
+    virtualize loop
+    goto hashmap<ip asu u64, asm index as u64>
+    if gotohashmap contains key current_ip
+    // changes goto addr to current index
+        self.asm[gotohashmap.get(current_ip) /* index */] = self.asm.length()
+    else
+        put current index (self.asm.length) as value and current_ip as key
+
+    if inst jump
+        emit opcode goto
+    if jmp.target > current_ip
+        emit 0 as u64
+        put current index (self.asm.length) as value and start_ip + jmp.target as key
+    else if gotohashmap contains key jmp.target
+        emit gotohashmap.get(current_ip) as u64
+    */
     pub fn virtualize(&mut self, program: &[u8]) -> Vec<u8> {
         self.virtualize_with_ip(0, program)
     }
