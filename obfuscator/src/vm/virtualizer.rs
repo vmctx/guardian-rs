@@ -1,5 +1,6 @@
 use crate::vm::machine::{Assembler, Register, Machine};
 use iced_x86::{Decoder, Formatter, Instruction, Mnemonic, NasmFormatter, OpKind};
+use iced_x86::Register::EAX;
 use memoffset::offset_of;
 
 trait Asm {
@@ -157,9 +158,11 @@ impl Virtualizer {
             Mnemonic::Movzx => self.movzx(inst),
             Mnemonic::Add => self.add(inst),
             Mnemonic::Sub => self.sub(inst),
-            Mnemonic::Div => self.div(inst),
-            Mnemonic::Idiv => self.div(inst),
-            Mnemonic::Mul => self.mul(inst),
+            // todo for now dont support them, see div method below
+            //Mnemonic::Div => self.div(inst),
+            //Mnemonic::Idiv => self.div(inst),
+            // same reason as div
+            //Mnemonic::Mul => self.mul(inst),
             Mnemonic::Imul => self.mul(inst),
             Mnemonic::Xor => self.xor(inst),
             Mnemonic::Cmp => self.cmp(inst),
@@ -197,8 +200,15 @@ impl Virtualizer {
         binary_op!(self, inst, sub);
     }
 
+    // todo store remainder, use correct regs
+    // https://treeniks.github.io/x86-64-simplified/instructions/binary-arithmetic-instructions/div.html
     fn div(&mut self, inst: &Instruction) {
-        binary_op!(self, inst, div);
+        vmasm!(self,
+            load_reg EAX;
+            load_operand inst, 0;
+            div;
+            store_reg EAX;
+        );
     }
 
     fn mul(&mut self, inst: &Instruction) {
@@ -403,9 +413,11 @@ mod tests {
         use iced_x86::code_asm::*;
         let mut a = CodeAssembler::new(64).unwrap();
         a.mov(rax, rcx).unwrap();
+        a.cmp(rax, rax).unwrap();
         a.add(rax, rax).unwrap();
         a.ret().unwrap();
         let m = Machine::new(&virtualize(&a.assemble(0).unwrap())).unwrap();
+
         let f: extern "C" fn(i32) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
         assert_eq!(f(8), 16);
     }

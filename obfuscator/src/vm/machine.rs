@@ -1,3 +1,4 @@
+use std::arch::asm;
 use anyhow::Result;
 use std::mem::size_of;
 use std::ops::BitXor;
@@ -84,27 +85,31 @@ impl From<iced_x86::Register> for Register {
 
 macro_rules! binary_op {
     ($self:ident, $op:ident) => {{
-        binary_op!($self, $op, true)
-    }};
-    ($self:ident, $op:ident, $store:expr) => {{
         let result = read_unaligned($self.sp.sub(1)).$op(read_unaligned($self.sp));
 
-        // should probably just copy entire rflags
-        let rflags = x86::bits64::rflags::read();
-        $self.rflags.set(RFlags::FLAGS_ZF, rflags.contains(RFlags::FLAGS_ZF));
-        $self.rflags.set(RFlags::FLAGS_CF, rflags.contains(RFlags::FLAGS_CF));
+        $self.set_of_cf();
 
-        // might not be neccessary since virtualizer does not
-        // emit store opcode
-        // from testing it seems neccessary though
-        if $store {
-            write_unaligned(
-                $self.sp.sub(1),
-                result,
-            );
+        write_unaligned(
+            $self.sp.sub(1),
+            result,
+        );
 
-            $self.sp = $self.sp.sub(1);
-        }
+        $self.sp = $self.sp.sub(1);
+    }}
+}
+
+macro_rules! binary_op_save_flags {
+    ($self:ident, $op:ident) => {{
+        let result = read_unaligned($self.sp.sub(1)).$op(read_unaligned($self.sp));
+
+        $self.set_rflags();
+
+        write_unaligned(
+            $self.sp.sub(1),
+            result,
+        );
+
+        $self.sp = $self.sp.sub(1);
     }}
 }
 
@@ -161,7 +166,9 @@ impl Machine {
 
         let mut a = CodeAssembler::new(64)?;
 
-        a.mov(rax, &m as *const _ as u64)?;
+        // todo this is kinda up, since its a
+        // potential use after free
+        a.mov(rax, &mut m as *mut _ as u64)?;
 
         // Store the GPRs
         for (reg, regid) in regmap.iter() {
@@ -225,6 +232,19 @@ impl Machine {
         Ok(m)
     }
 
+    // save carry and overflow cause why not
+    #[inline(always)]
+    pub fn set_of_cf(&mut self) {
+        let rflags = x86::bits64::rflags::read();
+        self.rflags.set(RFlags::FLAGS_OF, rflags.contains(RFlags::FLAGS_OF));
+        self.rflags.set(RFlags::FLAGS_CF, rflags.contains(RFlags::FLAGS_CF));
+    }
+
+    #[inline(always)]
+    pub fn set_rflags(&mut self) {
+        self.rflags = x86::bits64::rflags::read();
+    }
+
     // TODO to make this useable static in a patched binary, i have to translate the
     // program to assembly like in the machine::new function
     // this is currently JIT (just in time) have to translate to
@@ -252,12 +272,17 @@ impl Machine {
                     self.sp = self.sp.sub(2);
                 }
                 Opcode::Add => binary_op!(self, wrapping_add),
-                // both are identical, cmp doesnt affect operands
-                Opcode::Sub => binary_op!(self, wrapping_sub),
                 Opcode::Div => binary_op!(self, wrapping_div),
                 Opcode::Mul => binary_op!(self, wrapping_mul),
-                Opcode::Xor => binary_op!(self, bitxor),
-                Opcode::Cmp => binary_op!(self, wrapping_sub, false),
+                Opcode::Sub => binary_op_save_flags!(self, wrapping_sub),
+                Opcode::Xor => binary_op_save_flags!(self, bitxor),
+                Opcode::Cmp => {
+                    asm!("cmp {}, {}",
+                        in(reg) read_unaligned(self.sp.sub(1)),
+                        in(reg) read_unaligned(self.sp)
+                    );
+                    self.set_rflags();
+                }
                 Opcode::Vmctx => {
                     write_unaligned(self.sp.add(1), self as *const _ as u64);
                     self.sp = self.sp.add(1);

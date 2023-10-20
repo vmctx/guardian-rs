@@ -4,6 +4,7 @@ extern crate alloc;
 
 use alloc::vec;
 use alloc::vec::Vec;
+use core::arch::asm;
 use core::convert::TryFrom;
 use core::mem::size_of;
 use core::ops::BitXor;
@@ -124,27 +125,33 @@ impl From<Reg32> for Register {
 
 macro_rules! binary_op {
     ($self:ident, $op:ident) => {{
-        binary_op!($self, $op, true)
-    }};
-    ($self:ident, $op:ident, $store:expr) => {{
         let result = read_unaligned($self.sp.sub(1)).$op(read_unaligned($self.sp));
 
-        // should probably just copy entire rflags
-        let rflags = x86::bits64::rflags::read();
-        $self.rflags.set(RFlags::FLAGS_ZF, rflags.contains(RFlags::FLAGS_ZF));
-        $self.rflags.set(RFlags::FLAGS_CF, rflags.contains(RFlags::FLAGS_CF));
+        $self.set_of_cf();
 
-        if $store {
-            write_unaligned(
-                $self.sp.sub(1),
-                result,
-            );
+        write_unaligned(
+            $self.sp.sub(1),
+            result,
+        );
 
-            $self.sp = $self.sp.sub(1);
-        }
+        $self.sp = $self.sp.sub(1);
     }}
 }
 
+macro_rules! binary_op_save_flags {
+    ($self:ident, $op:ident) => {{
+        let result = read_unaligned($self.sp.sub(1)).$op(read_unaligned($self.sp));
+
+        $self.set_rflags();
+
+        write_unaligned(
+            $self.sp.sub(1),
+            result,
+        );
+
+        $self.sp = $self.sp.sub(1);
+    }}
+}
 
 #[repr(C)]
 pub struct Machine {
@@ -172,7 +179,6 @@ impl Machine {
             cpustack: vec![0; 0x1000],
             vmexit: core::ptr::null(),
         };
-
 
         let regmap: &[(&Reg64, u8)] = &[
             (&rax, Register::Rax.into()),
@@ -293,6 +299,19 @@ impl Machine {
             core::mem::transmute(vmenter_addr);
         vmenter(6);
     }
+
+    // save carry and overflow cause why not
+    #[inline(always)]
+    pub fn set_of_cf(&mut self) {
+        let rflags = x86::bits64::rflags::read();
+        self.rflags.set(RFlags::FLAGS_OF, rflags.contains(RFlags::FLAGS_OF));
+        self.rflags.set(RFlags::FLAGS_CF, rflags.contains(RFlags::FLAGS_CF));
+    }
+
+    #[inline(always)]
+    pub fn set_rflags(&mut self) {
+        self.rflags = x86::bits64::rflags::read();
+    }
 }
 
 #[allow(clippy::missing_safety_doc)]
@@ -322,12 +341,19 @@ pub unsafe extern "C" fn run(machine: *mut Machine) {
                 machine.sp = machine.sp.sub(2);
             }
             Opcode::Add => binary_op!(machine, wrapping_add),
-            // both are identical, cmp doesnt affect operands
-            Opcode::Sub => binary_op!(machine, wrapping_sub),
             Opcode::Div => binary_op!(machine, wrapping_div),
             Opcode::Mul => binary_op!(machine, wrapping_mul),
-            Opcode::Xor => binary_op!(machine, bitxor),
-            Opcode::Cmp => binary_op!(machine, wrapping_sub, false),
+            Opcode::Sub => binary_op_save_flags!(machine, wrapping_sub),
+            Opcode::Xor => binary_op_save_flags!(machine, bitxor),
+            Opcode::Cmp => {
+                // using asm instead here, because compiler would optimize
+                // out unused variable
+                asm!("cmp {}, {}",
+                    in(reg) read_unaligned(machine.sp.sub(1)),
+                    in(reg) read_unaligned(machine.sp)
+                );
+                machine.set_rflags();
+            }
             Opcode::Vmctx => {
                 // pushes machine ptr on the stack
                 write_unaligned(machine.sp.add(1), machine as *const _ as u64);
