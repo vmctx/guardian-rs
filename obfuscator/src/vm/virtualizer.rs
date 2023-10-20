@@ -10,6 +10,8 @@ trait Asm {
     fn sub(&mut self);
     fn div(&mut self);
     fn mul(&mut self);
+    fn xor(&mut self);
+    fn cmp(&mut self);
     fn vmctx(&mut self);
     fn vmexit(&mut self);
     fn load_operand(&mut self, inst: &Instruction, operand: u32);
@@ -159,6 +161,8 @@ impl Virtualizer {
             Mnemonic::Idiv => self.div(inst),
             Mnemonic::Mul => self.mul(inst),
             Mnemonic::Imul => self.mul(inst),
+            Mnemonic::Xor => self.xor(inst),
+            Mnemonic::Cmp => self.cmp(inst),
             Mnemonic::Ret => self.ret(),
             Mnemonic::Push => self.push(inst),
             Mnemonic::Pop => self.pop(inst),
@@ -199,6 +203,18 @@ impl Virtualizer {
 
     fn mul(&mut self, inst: &Instruction) {
         binary_op!(self, inst, mul);
+    }
+
+    fn xor(&mut self, inst: &Instruction) {
+        binary_op!(self, inst, xor);
+    }
+
+    fn cmp(&mut self, inst: &Instruction) {
+        vmasm!(self,
+            load_operand inst, 1;
+            load_operand inst, 0;
+            cmp;
+        );
     }
 
     fn ret(&mut self) {
@@ -275,6 +291,14 @@ impl Asm for Virtualizer {
         self.asm.mul();
     }
 
+    fn xor(&mut self) {
+        self.asm.xor();
+    }
+
+    fn cmp(&mut self) {
+        self.asm.cmp();
+    }
+
     fn vmctx(&mut self) {
         self.asm.vmctx();
     }
@@ -289,8 +313,8 @@ impl Asm for Virtualizer {
             OpKind::Memory => {
                 self.lea_operand(inst);
                 self.asm.load();
-            }
-            _ => panic!("unsupported operand"),
+            },
+            _ => panic!("unsupported operand: {:?}", inst.op_kind(operand)),
         }
     }
 

@@ -6,6 +6,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::convert::TryFrom;
 use core::mem::size_of;
+use core::ops::BitXor;
 use core::ptr::{read_unaligned, write_unaligned};
 
 use memoffset::offset_of;
@@ -48,6 +49,8 @@ pub enum Opcode {
     Sub,
     Div,
     Mul,
+    Xor,
+    Cmp,
     Vmctx,
     Vmexit,
 }
@@ -121,20 +124,27 @@ impl From<Reg32> for Register {
 
 macro_rules! binary_op {
     ($self:ident, $op:ident) => {{
+        binary_op!($self, $op, true)
+    }};
+    ($self:ident, $op:ident, $store:expr) => {{
         let result = read_unaligned($self.sp.sub(1)).$op(read_unaligned($self.sp));
 
+        // should probably just copy entire rflags
         let rflags = x86::bits64::rflags::read();
         $self.rflags.set(RFlags::FLAGS_ZF, rflags.contains(RFlags::FLAGS_ZF));
         $self.rflags.set(RFlags::FLAGS_CF, rflags.contains(RFlags::FLAGS_CF));
 
-        write_unaligned(
-            $self.sp.sub(1),
-            result,
-        );
+        if $store {
+            write_unaligned(
+                $self.sp.sub(1),
+                result,
+            );
 
-        $self.sp = $self.sp.sub(1);
+            $self.sp = $self.sp.sub(1);
+        }
     }}
 }
+
 
 #[repr(C)]
 pub struct Machine {
@@ -312,9 +322,12 @@ pub unsafe extern "C" fn run(machine: *mut Machine) {
                 machine.sp = machine.sp.sub(2);
             }
             Opcode::Add => binary_op!(machine, wrapping_add),
+            // both are identical, cmp doesnt affect operands
             Opcode::Sub => binary_op!(machine, wrapping_sub),
             Opcode::Div => binary_op!(machine, wrapping_div),
             Opcode::Mul => binary_op!(machine, wrapping_mul),
+            Opcode::Xor => binary_op!(machine, bitxor),
+            Opcode::Cmp => binary_op!(machine, wrapping_sub, false),
             Opcode::Vmctx => {
                 // pushes machine ptr on the stack
                 write_unaligned(machine.sp.add(1), machine as *const _ as u64);

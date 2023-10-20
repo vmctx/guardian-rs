@@ -1,5 +1,6 @@
 use anyhow::Result;
 use std::mem::size_of;
+use std::ops::BitXor;
 use std::ptr::{read_unaligned, write_unaligned};
 use memoffset::offset_of;
 use x86::bits64::rflags::RFlags;
@@ -14,6 +15,8 @@ pub enum Opcode {
     Sub,
     Div,
     Mul,
+    Xor,
+    Cmp,
     Vmctx,
     Vmexit,
 }
@@ -81,18 +84,27 @@ impl From<iced_x86::Register> for Register {
 
 macro_rules! binary_op {
     ($self:ident, $op:ident) => {{
+        binary_op!($self, $op, true)
+    }};
+    ($self:ident, $op:ident, $store:expr) => {{
         let result = read_unaligned($self.sp.sub(1)).$op(read_unaligned($self.sp));
 
+        // should probably just copy entire rflags
         let rflags = x86::bits64::rflags::read();
         $self.rflags.set(RFlags::FLAGS_ZF, rflags.contains(RFlags::FLAGS_ZF));
         $self.rflags.set(RFlags::FLAGS_CF, rflags.contains(RFlags::FLAGS_CF));
 
-        write_unaligned(
-            $self.sp.sub(1),
-            result,
-        );
+        // might not be neccessary since virtualizer does not
+        // emit store opcode
+        // from testing it seems neccessary though
+        if $store {
+            write_unaligned(
+                $self.sp.sub(1),
+                result,
+            );
 
-        $self.sp = $self.sp.sub(1);
+            $self.sp = $self.sp.sub(1);
+        }
     }}
 }
 
@@ -240,9 +252,12 @@ impl Machine {
                     self.sp = self.sp.sub(2);
                 }
                 Opcode::Add => binary_op!(self, wrapping_add),
+                // both are identical, cmp doesnt affect operands
                 Opcode::Sub => binary_op!(self, wrapping_sub),
                 Opcode::Div => binary_op!(self, wrapping_div),
                 Opcode::Mul => binary_op!(self, wrapping_mul),
+                Opcode::Xor => binary_op!(self, bitxor),
+                Opcode::Cmp => binary_op!(self, wrapping_sub, false),
                 Opcode::Vmctx => {
                     write_unaligned(self.sp.add(1), self as *const _ as u64);
                     self.sp = self.sp.add(1);
@@ -296,6 +311,14 @@ impl Assembler {
 
     pub fn mul(&mut self) {
         self.emit(Opcode::Mul);
+    }
+
+    pub fn xor(&mut self) {
+        self.emit(Opcode::Xor);
+    }
+
+    pub fn cmp(&mut self) {
+        self.emit(Opcode::Cmp);
     }
 
     pub fn vmctx(&mut self) {

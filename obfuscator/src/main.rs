@@ -43,19 +43,20 @@ use memoffset::offset_of;
 fn main() {
     let mut a = Assembler::default();
     let x = 8u64;
-    let y = 8u64;
+    let y = 4u64;
     let mut z = 0u64;
 
     a.const_(&x as *const _ as u64);
     a.load();
     a.const_(&y as *const _ as u64);
     a.load();
-    a.sub();
+    a.cmp();
+    a.add();
     a.const_(&mut z as *mut _ as u64);
     a.store();
 
     unsafe { Machine::new(&a.assemble()).unwrap().run() };
-    assert_eq!(z, 4);
+    assert_eq!(z, 12);
     #[repr(C)]
     pub struct TestMachine {
         pub(crate) pc: *const u8,
