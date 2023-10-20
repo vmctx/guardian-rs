@@ -337,6 +337,7 @@ pub unsafe extern "C" fn run(machine: *mut Machine) {
             }
             Opcode::Load => *machine.sp = *(*machine.sp as *const u64),
             Opcode::Store => {
+                // stores last value in address loaded by const
                 write_unaligned(*machine.sp as *mut u64, read_unaligned(machine.sp.sub(1)));
                 machine.sp = machine.sp.sub(2);
             }

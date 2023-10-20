@@ -56,8 +56,8 @@ macro_rules! binary_op {
         assert_eq!($inst.op_count(), 2);
 
         vmasm!($self,
-            load_operand $inst, 1;
             load_operand $inst, 0;
+            load_operand $inst, 1;
             $op;
             store_operand $inst, 0;
         );
@@ -159,7 +159,7 @@ impl Virtualizer {
             Mnemonic::Add => self.add(inst),
             Mnemonic::Sub => self.sub(inst),
             // todo for now dont support them, see div method below
-            //Mnemonic::Div => self.div(inst),
+            Mnemonic::Div => self.div(inst),
             //Mnemonic::Idiv => self.div(inst),
             // same reason as div
             //Mnemonic::Mul => self.mul(inst),
@@ -202,12 +202,42 @@ impl Virtualizer {
 
     // todo store remainder, use correct regs
     // https://treeniks.github.io/x86-64-simplified/instructions/binary-arithmetic-instructions/div.html
+    // inst.op0_kind().eq(...)
+    // inst.op_register(0).size() 1, 2, 4, 8 bytes
+    /*
+    load_operand inst, 0;
+    if op_kind is 8 bit
+        load_reg AX
+        div
+        store_reg AL
+        store_reg AH
+    else if op_kind is 16 bit
+        load_reg AX
+        div
+        store_reg AX
+        store_reg DX
+    else if op_kind is 32 bit
+        load_reg EAX
+        div
+        store_reg EAX
+        store_reg EDX
+    else if op_kind is 64 bit
+        load_reg RAX
+        div
+        store_reg RAX
+        store_reg RDX
+
+     */
     fn div(&mut self, inst: &Instruction) {
+        use iced_x86::Register::RAX;
+        // opkind has to be memory or register
+        assert_ne!(inst.op0_kind(), OpKind::Immediate8to64);
+
         vmasm!(self,
-            load_reg EAX;
+            load_reg RAX;
             load_operand inst, 0;
             div;
-            store_reg EAX;
+            store_reg RAX;
         );
     }
 
@@ -324,6 +354,12 @@ impl Asm for Virtualizer {
                 self.lea_operand(inst);
                 self.asm.load();
             },
+            // todo maybe use traits to restrict opkinds on some functions
+            // like div which can only have register and memory
+            // sub can have immediates as example
+            OpKind::Immediate8to64 => {
+                self.const_(inst.immediate8to64() as u64)
+            }
             _ => panic!("unsupported operand: {:?}", inst.op_kind(operand)),
         }
     }
@@ -412,14 +448,15 @@ mod tests {
     fn assembler_virtualizer_and_machine() {
         use iced_x86::code_asm::*;
         let mut a = CodeAssembler::new(64).unwrap();
-        a.mov(rax, rcx).unwrap();
-        a.cmp(rax, rax).unwrap();
-        a.add(rax, rax).unwrap();
+        a.mov(rdx, rcx).unwrap(); // 8
+        a.sub(rdx, 4i32).unwrap(); // 7
+        a.mov(rax, rcx).unwrap(); // 8
+        a.div(rdx).unwrap(); // 8 / 7
         a.ret().unwrap();
         let m = Machine::new(&virtualize(&a.assemble(0).unwrap())).unwrap();
 
         let f: extern "C" fn(i32) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
-        assert_eq!(f(8), 16);
+        assert_eq!(f(8), 2);
     }
 
     #[test]
