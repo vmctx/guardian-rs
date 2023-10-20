@@ -1,7 +1,7 @@
 use std::arch::asm;
 use anyhow::Result;
 use std::mem::size_of;
-use std::ops::BitXor;
+use std::ops::{BitAnd, BitOr, BitXor};
 use std::ptr::{read_unaligned, write_unaligned};
 use memoffset::offset_of;
 use x86::bits64::rflags::RFlags;
@@ -16,6 +16,8 @@ pub enum Opcode {
     Sub,
     Div,
     Mul,
+    And,
+    Or,
     Xor,
     Cmp,
     Vmctx,
@@ -275,6 +277,8 @@ impl Machine {
                 Opcode::Div => binary_op!(self, wrapping_div),
                 Opcode::Mul => binary_op!(self, wrapping_mul),
                 Opcode::Sub => binary_op_save_flags!(self, wrapping_sub),
+                Opcode::And => binary_op_save_flags!(self, bitand),
+                Opcode::Or => binary_op_save_flags!(self, bitor),
                 Opcode::Xor => binary_op_save_flags!(self, bitxor),
                 Opcode::Cmp => {
                     asm!("cmp {}, {}",
@@ -336,6 +340,14 @@ impl Assembler {
 
     pub fn mul(&mut self) {
         self.emit(Opcode::Mul);
+    }
+
+    pub fn and(&mut self) {
+        self.emit(Opcode::And);
+    }
+
+    pub fn or(&mut self) {
+        self.emit(Opcode::Or);
     }
 
     pub fn xor(&mut self) {

@@ -11,6 +11,8 @@ trait Asm {
     fn sub(&mut self);
     fn div(&mut self);
     fn mul(&mut self);
+    fn and(&mut self);
+    fn or(&mut self);
     fn xor(&mut self);
     fn cmp(&mut self);
     fn vmctx(&mut self);
@@ -164,6 +166,8 @@ impl Virtualizer {
             // same reason as div
             //Mnemonic::Mul => self.mul(inst),
             Mnemonic::Imul => self.mul(inst),
+            Mnemonic::And => self.and(inst),
+            Mnemonic::Or => self.or(inst),
             Mnemonic::Xor => self.xor(inst),
             Mnemonic::Cmp => self.cmp(inst),
             Mnemonic::Ret => self.ret(),
@@ -243,6 +247,14 @@ impl Virtualizer {
 
     fn mul(&mut self, inst: &Instruction) {
         binary_op!(self, inst, mul);
+    }
+
+    fn and(&mut self, inst: &Instruction) {
+        binary_op!(self, inst, and);
+    }
+
+    fn or(&mut self, inst: &Instruction) {
+        binary_op!(self, inst, or);
     }
 
     fn xor(&mut self, inst: &Instruction) {
@@ -329,6 +341,14 @@ impl Asm for Virtualizer {
 
     fn mul(&mut self) {
         self.asm.mul();
+    }
+
+    fn and(&mut self) {
+        self.asm.and();
+    }
+
+    fn or(&mut self) {
+        self.asm.or();
     }
 
     fn xor(&mut self) {

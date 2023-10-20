@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 use core::arch::asm;
 use core::convert::TryFrom;
 use core::mem::size_of;
-use core::ops::BitXor;
+use core::ops::{BitAnd, BitOr, BitXor};
 use core::ptr::{read_unaligned, write_unaligned};
 
 use memoffset::offset_of;
@@ -50,6 +50,8 @@ pub enum Opcode {
     Sub,
     Div,
     Mul,
+    And,
+    Or,
     Xor,
     Cmp,
     Vmctx,
@@ -174,7 +176,7 @@ impl Machine {
             sp: core::ptr::null_mut(),
             regs: [0; 16],
             rflags: RFlags::new(),
-            program: [5, 0, 24, 0, 0, 0, 0, 0, 0, 0, 3, 1, 5, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 2, 5, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 1, 5, 0, 16, 0, 0, 0, 0, 0, 0, 0, 3, 2, 5, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 1, 5, 0, 16, 0, 0, 0, 0, 0, 0, 0, 3, 1, 4, 5, 0, 16, 0, 0, 0, 0, 0, 0, 0, 3, 2, 5, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 1, 1, 5, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 5, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 2, 6],
+            program: [11, 0, 24, 0, 0, 0, 0, 0, 0, 0, 3, 1, 11, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 2, 11, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 1, 11, 0, 16, 0, 0, 0, 0, 0, 0, 0, 3, 2, 11, 0, 16, 0, 0, 0, 0, 0, 0, 0, 3, 1, 11, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 1, 6, 11, 0, 16, 0, 0, 0, 0, 0, 0, 0, 3, 2, 11, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 1, 1, 11, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 11, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 2, 12],
             vmstack: vec![0; 0x1000],
             cpustack: vec![0; 0x1000],
             vmexit: core::ptr::null(),
@@ -345,6 +347,8 @@ pub unsafe extern "C" fn run(machine: *mut Machine) {
             Opcode::Div => binary_op!(machine, wrapping_div),
             Opcode::Mul => binary_op!(machine, wrapping_mul),
             Opcode::Sub => binary_op_save_flags!(machine, wrapping_sub),
+            Opcode::And => binary_op_save_flags!(machine, bitand),
+            Opcode::Or => binary_op_save_flags!(machine, bitor),
             Opcode::Xor => binary_op_save_flags!(machine, bitxor),
             Opcode::Cmp => {
                 // using asm instead here, because compiler would optimize
