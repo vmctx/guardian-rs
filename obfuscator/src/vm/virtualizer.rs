@@ -269,6 +269,7 @@ impl Virtualizer {
     }
 
     fn ret(&mut self) {
+        /*
         use iced_x86::Register::RSP;
 
         vmasm!(self,
@@ -278,6 +279,10 @@ impl Virtualizer {
             const_ 8;
             add;
             store_reg RSP;
+            vmexit;
+        );
+         */
+        vmasm!(self,
             vmexit;
         );
     }

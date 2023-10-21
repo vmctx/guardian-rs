@@ -62,11 +62,14 @@ fn main() {
         pub(crate) pc: *const u8,
         pub(crate) sp: *mut u64,
         pub regs: [u64; 16],
-        pub(crate) program: [u8; 16],
+        pub rflags: u64,
+        pub(crate) program: *const u8,
         pub(crate) vmstack: Vec<u64>,
         pub(crate) cpustack: Vec<u8>,
+        pub cpustack_ptr: *const u8,
+        vmexit: *const u64,
     }
-    let test = offset_of!(TestMachine, cpustack) + 0x1000 - 0x100 - std::mem::size_of::<u64>();
+    let test = 0x1000 - 0x100 - std::mem::size_of::<u64>();
     println!("test: {:x}", test);
     // "../reddeadonline/target/x86_64-pc-windows-msvc/release-lto/loader.exe"
     let mut pefile = VecPE::from_disk_file("../hello_world/target/release/hello_world.exe").unwrap();

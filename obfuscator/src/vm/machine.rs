@@ -123,7 +123,6 @@ pub struct Machine {
     pub rflags: RFlags,
     pub(crate) program: Vec<u8>,
     pub(crate) vmstack: Vec<u64>,
-    pub(crate) cpustack: Vec<u8>,
     pub vmenter: region::Allocation,
     pub(crate) vmexit: region::Allocation,
 }
@@ -141,7 +140,6 @@ impl Machine {
             rflags: RFlags::new(),
             program: program.to_vec(),
             vmstack: [0; 0x1000].to_vec(),
-            cpustack: [0; 0x1000].to_vec(),
             vmenter: region::alloc(region::page::size(), region::Protection::READ_WRITE_EXECUTE)?,
             vmexit: region::alloc(region::page::size(), region::Protection::READ_WRITE_EXECUTE)?,
         };
@@ -179,12 +177,7 @@ impl Machine {
         }
 
         // Switch to the VM's CPU stack.
-        let vm_rsp = unsafe {
-            m.cpustack
-                .as_ptr()
-                .add(m.cpustack.len() - 0x100 - size_of::<u64>()) as u64
-        };
-        a.mov(rsp, vm_rsp)?;
+
 
         a.mov(rcx, rax)?;
         a.mov(rax, Self::run as u64)?;
@@ -200,19 +193,21 @@ impl Machine {
         // Generate VMEXIT.
         let regmap: &[(&AsmRegister64, u8)] = &[
             (&rax, Register::Rax.into()),
-            (&rbx, Register::Rbx.into()),
+            (&rdx, Register::Rbx.into()),
+            // (&rbx, Register::Rbx.into()),
             (&rsp, Register::Rsp.into()),
-            (&rbp, Register::Rbp.into()),
-            (&rsi, Register::Rsi.into()),
-            (&rdi, Register::Rdi.into()),
+            // (&rbp, Register::Rbp.into()),
+            // (&rsi, Register::Rsi.into()),
+            // (&rdi, Register::Rdi.into()),
             (&r8, Register::R8.into()),
             (&r9, Register::R9.into()),
             (&r10, Register::R10.into()),
             (&r11, Register::R11.into()),
-            (&r12, Register::R12.into()),
-            (&r13, Register::R13.into()),
-            (&r14, Register::R14.into()),
-            (&r15, Register::R15.into()),
+            // (&r12, Register::R12.into()),
+            // (&r13, Register::R13.into()),
+            // (&r14, Register::R14.into()),
+            // (&r15, Register::R15.into()),
+            // (&rcx, Register::Rbx.into()),
         ];
 
         let mut a = CodeAssembler::new(64)?;
@@ -223,7 +218,7 @@ impl Machine {
             a.mov(**reg, qword_ptr(rcx + offset))?;
         }
 
-        a.jmp(rdx)?;
+        a.ret()?;
 
         let insts = a.assemble(m.vmexit.as_ptr::<u64>() as u64)?;
 
@@ -286,11 +281,9 @@ impl Machine {
                     self.sp = self.sp.add(1);
                 }
                 Opcode::Vmexit => {
-                    let exit_ip = read_unaligned(self.sp);
-                    self.sp = self.sp.sub(1);
-                    let vmexit: extern "C" fn(&mut Machine, u64) =
+                    let vmexit: extern "C" fn(&mut Machine) =
                         std::mem::transmute(self.vmexit.as_ptr::<()>());
-                    vmexit(self, exit_ip);
+                    vmexit(self);
                 }
             }
         }

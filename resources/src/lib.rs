@@ -10,18 +10,16 @@ use core::mem::size_of;
 use core::ops::{BitAnd, BitOr, BitXor};
 use core::ptr::{read_unaligned, write_unaligned};
 
-use memoffset::offset_of;
-use winapi::ctypes::c_void;
 use x86::bits64::rflags::RFlags;
 
-use assembler::Asm;
 use assembler::prelude::{Reg32::*, Reg64::*};
 use assembler::prelude::Mov;
 use assembler::Reg64;
 
-use crate::assembler::{Imm64, Reg32};
+use crate::assembler::Reg32;
 use crate::assembler::prelude::Jmp;
-use crate::syscalls::NtAllocateVirtualMemory;
+
+use crate::vm::vmexit;
 
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
@@ -30,7 +28,7 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
 
 mod crt;
 // mod region;
-// mod vm;
+mod vm;
 mod syscalls;
 #[allow(dead_code)]
 mod assembler;
@@ -155,160 +153,38 @@ macro_rules! binary_op_save_flags {
     }}
 }
 
+#[no_mangle]
+#[link_section = ".text"]
+ static BYTECODE: [u8; 119] = [11, 0, 24, 0, 0, 0, 0, 0, 0, 0, 3, 1, 11, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 2, 11, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 1, 11, 0, 16, 0, 0, 0, 0, 0, 0, 0, 3, 2, 11, 0, 16, 0, 0, 0, 0, 0, 0, 0, 3, 1, 11, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 1, 6, 11, 0, 16, 0, 0, 0, 0, 0, 0, 0, 3, 2, 12];
+
 #[repr(C)]
 pub struct Machine {
     pub(crate) pc: *const u8,
     pub(crate) sp: *mut u64,
     pub regs: [u64; 16],
-    pub rflags: RFlags,
-    pub(crate) program: [u8; 166],
+    pub rflags: u64,
     pub(crate) vmstack: Vec<u64>,
-    pub(crate) cpustack: Vec<u8>,
-    vmexit: *const u64,
 }
 
 impl Machine {
     #[no_mangle]
-    #[inline(never)]
-    pub unsafe extern "C" fn vm() {
-        let mut m = Self {
+    pub unsafe extern "C" fn new_vm() -> Self {
+        Self {
             pc: core::ptr::null(),
             sp: core::ptr::null_mut(),
             regs: [0; 16],
-            rflags: RFlags::new(),
-            program: [11, 0, 24, 0, 0, 0, 0, 0, 0, 0, 3, 1, 11, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 2, 11, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 1, 11, 0, 16, 0, 0, 0, 0, 0, 0, 0, 3, 2, 11, 0, 16, 0, 0, 0, 0, 0, 0, 0, 3, 1, 11, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 1, 6, 11, 0, 16, 0, 0, 0, 0, 0, 0, 0, 3, 2, 11, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 1, 1, 11, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 3, 11, 0, 48, 0, 0, 0, 0, 0, 0, 0, 3, 2, 12],
-            vmstack: vec![0; 0x1000],
-            cpustack: vec![0; 0x1000],
-            vmexit: core::ptr::null(),
-        };
-
-        let regmap: &[(&Reg64, u8)] = &[
-            (&rax, Register::Rax.into()),
-            (&rcx, Register::Rcx.into()),
-            (&rdx, Register::Rdx.into()),
-            (&rbx, Register::Rbx.into()),
-            (&rsp, Register::Rsp.into()),
-            (&rbp, Register::Rbp.into()),
-            (&rsi, Register::Rsi.into()),
-            (&rdi, Register::Rdi.into()),
-            (&r8, Register::R8.into()),
-            (&r9, Register::R9.into()),
-            (&r10, Register::R10.into()),
-            (&r11, Register::R11.into()),
-            (&r12, Register::R12.into()),
-            (&r13, Register::R13.into()),
-            (&r14, Register::R14.into()),
-            (&r15, Register::R15.into()),
-        ];
-
-        let mut asm = Asm::new();
-
-        asm.mov(rax, Imm64::from(&mut m as *mut _ as u64));
-
-        for (reg, regid) in regmap.iter() {
-            let offset = offset_of!(Machine, regs) + *regid as usize * 8;
-            asm.mov(assembler::MemOp::IndirectDisp(rax, offset as i32), **reg);
+            rflags: 0,
+            vmstack: vec![0u64; 0x1000],
         }
-
-        let vm_rsp = unsafe {
-            m.cpustack
-                .as_ptr()
-                .add(m.cpustack.len() - 0x100 - size_of::<u64>()) as u64
-        };
-        asm.mov(rsp, Imm64::from(vm_rsp));
-
-        asm.mov(rcx, rax);
-        asm.mov(rax, Imm64::from(Self::run as u64));
-        asm.jmp(rax);
-
-        let rt = asm.into_code();
-        let mut vmenter_addr: usize = 0;
-        let mut size = 0x1000;
-        let _result = unsafe {
-            NtAllocateVirtualMemory(
-                -1isize as *mut c_void,
-                &mut vmenter_addr as *mut usize as _,
-                0,
-                &mut size,
-                0x1000 | 0x2000, // commit | reserve
-                0x40, // page RWX
-            )
-        };
-
-        unsafe {
-            core::ptr::copy(rt.as_ptr(), vmenter_addr as *mut u8, rt.len());
-        };
-
-        // Generate VMEXIT.
-        let regmap: &[(&Reg64, u8)] = &[
-            (&rax, Register::Rax.into()),
-            (&rbx, Register::Rbx.into()),
-            (&rsp, Register::Rsp.into()),
-            (&rbp, Register::Rbp.into()),
-            (&rsi, Register::Rsi.into()),
-            (&rdi, Register::Rdi.into()),
-            (&r8, Register::R8.into()),
-            (&r9, Register::R9.into()),
-            (&r10, Register::R10.into()),
-            (&r11, Register::R11.into()),
-            (&r12, Register::R12.into()),
-            (&r13, Register::R13.into()),
-            (&r14, Register::R14.into()),
-            (&r15, Register::R15.into()),
-        ];
-
-        let mut asm = Asm::new();
-
-        for (reg, regid) in regmap.iter() {
-            let offset = offset_of!(Machine, regs) + *regid as usize * 8;
-            asm.mov(**reg, assembler::MemOp::IndirectDisp(rcx, offset as i32));
-        }
-
-        asm.jmp(rdx);
-
-        let rt = asm.into_code();
-        let mut vmexit_addr: usize = 0;
-        let mut size = 0x1000;
-        let _result = unsafe {
-            NtAllocateVirtualMemory(
-                -1isize as *mut c_void,
-                &mut vmexit_addr as *mut usize as _,
-                0,
-                &mut size,
-                0x1000 | 0x2000, // commit | reserve
-                0x40, // page RWX
-            )
-        };
-
-        unsafe {
-            core::ptr::copy(rt.as_ptr(), vmexit_addr as *mut u8, rt.len());
-        };
-
-        m.vmexit = vmexit_addr as _;
-
-        // todo preserve registers before setting up machine
-        // either do that here somehow by inserting an asm stub or insert one
-        // which is probably better
-        // from the obfuscator, so
-        // save_regs
-        // call vm to generate machine
-        // save ptr to vmenter
-        // restore_regs
-        // call vmenter
-        // todo also somehow deallocate vmenter and vmexit after
-
-        let vmenter: extern "C" fn(i32) -> i32 =
-            core::mem::transmute(vmenter_addr);
-        vmenter(6);
     }
 
     #[allow(clippy::missing_safety_doc)]
     #[no_mangle]
-    pub unsafe extern "C" fn run(&mut self) {
-        self.pc = self.program.as_ptr();
+    pub unsafe extern "C" fn run(&mut self, program: *const u8) {
+        self.pc = program;
         self.sp = self.vmstack.as_mut_ptr();
 
-        while self.pc < self.program.as_ptr_range().end {
+       loop {
             let op = Opcode::try_from(*self.pc).unwrap();
             // increase program counter by one byte
             // for const, this will load the address
@@ -349,11 +225,7 @@ impl Machine {
                     self.sp = self.sp.add(1);
                 }
                 Opcode::Vmexit => {
-                    let exit_ip = read_unaligned(self.sp);
-                    self.sp = self.sp.sub(1);
-                    let vmexit: extern "C" fn(&mut Machine, u64) =
-                        core::mem::transmute(self.vmexit);
-                    vmexit(self, exit_ip);
+                    vmexit(self);
                 }
             }
         }
@@ -363,13 +235,15 @@ impl Machine {
     #[inline(always)]
     pub fn set_of_cf(&mut self) {
         let rflags = x86::bits64::rflags::read();
-        self.rflags.set(RFlags::FLAGS_OF, rflags.contains(RFlags::FLAGS_OF));
-        self.rflags.set(RFlags::FLAGS_CF, rflags.contains(RFlags::FLAGS_CF));
+        let mut rflags_new = RFlags::from_bits_truncate(self.rflags);
+        rflags_new.set(RFlags::FLAGS_OF, rflags.contains(RFlags::FLAGS_OF));
+        rflags_new.set(RFlags::FLAGS_CF, rflags.contains(RFlags::FLAGS_CF));
+        self.rflags = rflags_new.bits();
     }
 
     #[inline(always)]
     pub fn set_rflags(&mut self) {
-        self.rflags = x86::bits64::rflags::read();
+        self.rflags = x86::bits64::rflags::read().bits();
     }
 }
 

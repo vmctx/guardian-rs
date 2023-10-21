@@ -13,7 +13,7 @@ rustflags = [
 
     # Post Link Args
     "-C", "relocation-model=pie",
-    "-C", "link-arg=/ENTRY:vm",
+    "-C", "link-arg=/ENTRY:vmentry",
     "-C", "link-arg=/OPT:NOREF",
     #"-C", "link-arg=/OPT:REF,ICF",
     "-C", "link-arg=/SAFESEH:NO",
@@ -21,6 +21,6 @@ rustflags = [
     #"-C", "link-arg=/INTEGRITYCHECK"
     "-C", "link-arg=/DEBUG:NONE",
     "-C", "link-arg=/MERGE:.rdata=.text",
-    "-C", "link-arg=/MERGE:.data=.text",
+    #"-C", "link-arg=/MERGE:.data=.text",
     "-Clink-arg=/MAP:target/x86_64-pc-windows-msvc/release/vm.map"
 ]
