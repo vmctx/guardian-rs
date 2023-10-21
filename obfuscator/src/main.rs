@@ -36,9 +36,9 @@ use crate::vm::virtualizer::{virtualize, virtualize_with_ip};
 // lea rax, virtual machine (run function, section .vm offset 0)
 // call rax (call run function with ptr to machine struct)
 
-
-use exe::{Buffer, CCharString, Error, ImageSectionHeader, NTHeadersMut, PE, PEType, RVA, SectionCharacteristics, VecPE};
-use iced_x86::code_asm::AsmRegister64;
+use exe::{Buffer, CCharString, Error, ImageSectionHeader, NTHeadersMut, Offset, PE, PEType, RelocationDirectory, RVA, SectionCharacteristics, VecPE};
+use iced_x86::code_asm::{AsmRegister64, CodeAssembler};
+use iced_x86::Decoder;
 use memoffset::offset_of;
 use symbolic_demangle::Demangle;
 
@@ -84,8 +84,6 @@ fn main() {
 
     let mut pefile = VecPE::from_disk_file("../hello_world/target/release/hello_world.exe").unwrap();
 
-    let target_function = pefile.get_slice_ref::<u8>(pefile.rva_to_offset(RVA(function.rva.0 as _)).unwrap().0 as _, function_size).expect("rawr");
-    println!("real size: {:x}", Disassembler::from_bytes(target_function.to_vec()).disassemble());
     // relocating will probably be done dynamically
     // have to mark them as relocate somehow
     // but for jmps i need to be able to identify label with target
@@ -134,6 +132,16 @@ fn main() {
 
     let machine_addr = vm_section.virtual_address.0 + vm_section.size_of_raw_data - size_of_val(&vm1) as u32;
 
+    // test patching
+    let target_fn_addr = pefile.rva_to_offset(RVA(function.rva.0 as _)).unwrap().0 as _;
+    let target_function = pefile.get_slice_ref::<u8>(target_fn_addr, function_size).expect("rawr");
+    let function_size = Disassembler::from_bytes(target_function.to_vec()).disassemble();
+    println!("real size: {:x}", function_size);
+    let patch_len = patch_function(&mut pefile, target_fn_addr, function_size, vm_section.virtual_address.0 + machine_entry.0 - 0x1000, bytecode_section.virtual_address.0);
+    let target_function_mut = pefile.get_slice_ref::<u8>(target_fn_addr, patch_len).expect("rawr");
+    Disassembler::from_bytes(target_function_mut.to_vec()).disassemble();
+    //
+
     // create machine linking to program at start of bytecode section
     let nt_headers = pefile.get_valid_mut_nt_headers();
     assert!(nt_headers.is_ok());
@@ -162,17 +170,48 @@ fn main() {
 
     println!("{:x}", machine_addr + offset_of!(VmMachine, vmenter) as u32);
     println!("{:x}", machine_addr as u32 );
+    let patched_entry = pefile.offset_to_rva(Offset(target_fn_addr as _)).unwrap();
     let nt_headers = pefile.get_valid_mut_nt_headers();
     assert!(nt_headers.is_ok());
 
-    if let NTHeadersMut::NTHeaders64(nt_headers_64) = nt_headers.unwrap() {
-        nt_headers_64.optional_header.address_of_entry_point = RVA(vm_section.virtual_address.0 + machine_entry.0 - 0x1000);
-    }
+
 
     //
 
     pefile.recreate_image(PEType::Disk).unwrap();
     pefile.save("../hello_world/target/release/hello_world_modded.exe").unwrap();
+}
+
+fn patch_function(pefile: &mut VecPE, target_fn: usize, target_fn_size: usize, vm_rva: u32, bytecode_rva: u32) -> usize {
+/*
+    for index in 0..pefile.get_buffer().len() {
+        if index >= target_fn && index <= target_fn + target_fn_size {
+            pefile.remove(index);
+        }
+    }
+ */
+    let target_fn_rva = pefile.offset_to_rva(Offset(target_fn as u32)).unwrap();
+    let mut a = CodeAssembler::new(64).unwrap();
+    // todo add relocs
+    // todo get the fcking right address!!
+/*
+    let mut push = Decoder::new(64, &vec![0xff, 0x35, 0x00, 0x00, 0x00, 0x00], 0).decode();
+    push.set_memory_displacement64(bytecode_rva as u64 - target_fn_rva.0 as u64);
+    a.add_instruction(push).unwrap();
+ */
+    println!("{:x}",  pefile.get_image_base().unwrap());
+    println!("rva: {:x}", pefile.get_image_base().unwrap() + vm_rva as u64  as u64);
+    a.jmp(vm_rva as u64 - target_fn_rva.0 as u64).unwrap();
+    let patch = a.assemble(0).unwrap();
+
+    println!("{:x}", target_fn_rva.0);
+
+    let target_function_mut = pefile.get_mut_slice_ref::<u8>(target_fn, patch.len()).unwrap();
+    target_function_mut.copy_from_slice(patch.as_slice());
+    //pefile.get_mut_section_by_name(".text".to_string()).unwrap().
+    pefile.pad_to_alignment().unwrap();
+    pefile.fix_image_size().unwrap();
+    patch.len()
 }
 
 fn add_section(pefile: &mut VecPE, section: &ImageSectionHeader, data: &Vec<u8>) -> Result<ImageSectionHeader, Error> {

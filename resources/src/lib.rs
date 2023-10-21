@@ -168,6 +168,7 @@ pub struct Machine {
 
 impl Machine {
     #[no_mangle]
+    #[inline(never)]
     pub unsafe extern "C" fn new_vm() -> Self {
         Self {
             pc: core::ptr::null(),

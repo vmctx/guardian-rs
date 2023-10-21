@@ -55,14 +55,13 @@ vmentry:
     // push bytecode_location
     // jmp vmentry
     //
-    call new_vm // stores machine in rax?
+    jmp new_vm // stores machine in rax?
     // avoid new_vm call from changing registers like that
     popvol
     jmp vmenter
 
 vmenter:
-    // move registers into machines registers
-    mov rcx, 4
+    // move registers into machines registerswdym
     mov [rax + 0x10], rax
     mov [rax + 0x18], rcx
     mov [rax + 0x20], rdx

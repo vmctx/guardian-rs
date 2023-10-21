@@ -13,6 +13,7 @@ debug-assertions = false
 panic = "abort"
 # produce pdb with this, and remove debug:none in config.toml
 # debug = true
+strip = true
 opt-level = "z"
 lto = true
-codegen-units = 1
+#codegen-units = 1
