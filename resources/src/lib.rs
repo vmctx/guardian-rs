@@ -218,7 +218,7 @@ impl Machine {
         asm.mov(rsp, Imm64::from(vm_rsp));
 
         asm.mov(rcx, rax);
-        asm.mov(rax, Imm64::from(run as u64));
+        asm.mov(rax, Imm64::from(Self::run as u64));
         asm.jmp(rax);
 
         let rt = asm.into_code();
@@ -302,6 +302,63 @@ impl Machine {
         vmenter(6);
     }
 
+    #[allow(clippy::missing_safety_doc)]
+    #[no_mangle]
+    pub unsafe extern "C" fn run(&mut self) {
+        self.pc = self.program.as_ptr();
+        self.sp = self.vmstack.as_mut_ptr();
+
+        while self.pc < self.program.as_ptr_range().end {
+            let op = Opcode::try_from(*self.pc).unwrap();
+            // increase program counter by one byte
+            // for const, this will load the address
+            self.pc = self.pc.add(1);
+
+            match op {
+                Opcode::Const => {
+                    write_unaligned(self.sp.add(1), read_unaligned(self.pc as *const u64));
+                    self.sp = self.sp.add(1);
+                    // increase program counter to skip value (8 bytes)
+                    self.pc = self.pc.add(size_of::<u64>());
+                }
+                Opcode::Load => *self.sp = *(*self.sp as *const u64),
+                Opcode::Store => {
+                    // stores last value in address loaded by const
+                    write_unaligned(*self.sp as *mut u64, read_unaligned(self.sp.sub(1)));
+                    self.sp = self.sp.sub(2);
+                }
+                Opcode::Add => binary_op!(self, wrapping_add),
+                Opcode::Div => binary_op!(self, wrapping_div),
+                Opcode::Mul => binary_op!(self, wrapping_mul),
+                Opcode::Sub => binary_op_save_flags!(self, wrapping_sub),
+                Opcode::And => binary_op_save_flags!(self, bitand),
+                Opcode::Or => binary_op_save_flags!(self, bitor),
+                Opcode::Xor => binary_op_save_flags!(self, bitxor),
+                Opcode::Cmp => {
+                    // using asm instead here, because compiler would optimize
+                    // out unused variable
+                    asm!("cmp {}, {}",
+                    in(reg) read_unaligned(self.sp.sub(1)),
+                    in(reg) read_unaligned(self.sp)
+                    );
+                    self.set_rflags();
+                }
+                Opcode::Vmctx => {
+                    // pushes self ptr on the stack
+                    write_unaligned(self.sp.add(1), self as *const _ as u64);
+                    self.sp = self.sp.add(1);
+                }
+                Opcode::Vmexit => {
+                    let exit_ip = read_unaligned(self.sp);
+                    self.sp = self.sp.sub(1);
+                    let vmexit: extern "C" fn(&mut Machine, u64) =
+                        core::mem::transmute(self.vmexit);
+                    vmexit(self, exit_ip);
+                }
+            }
+        }
+    }
+
     // save carry and overflow cause why not
     #[inline(always)]
     pub fn set_of_cf(&mut self) {
@@ -316,61 +373,4 @@ impl Machine {
     }
 }
 
-#[allow(clippy::missing_safety_doc)]
-#[no_mangle]
-pub unsafe extern "C" fn run(machine: *mut Machine) {
-    let machine = machine.as_mut().unwrap();
 
-    machine.pc = machine.program.as_ptr();
-    machine.sp = machine.vmstack.as_mut_ptr();
-
-    while machine.pc < machine.program.as_ptr_range().end {
-        let op = Opcode::try_from(*machine.pc).unwrap();
-        // increase program counter by one byte
-        // for const, this will load the address
-        machine.pc = machine.pc.add(1);
-
-        match op {
-            Opcode::Const => {
-                write_unaligned(machine.sp.add(1), read_unaligned(machine.pc as *const u64));
-                machine.sp = machine.sp.add(1);
-                // increase program counter to skip value (8 bytes)
-                machine.pc = machine.pc.add(size_of::<u64>());
-            }
-            Opcode::Load => *machine.sp = *(*machine.sp as *const u64),
-            Opcode::Store => {
-                // stores last value in address loaded by const
-                write_unaligned(*machine.sp as *mut u64, read_unaligned(machine.sp.sub(1)));
-                machine.sp = machine.sp.sub(2);
-            }
-            Opcode::Add => binary_op!(machine, wrapping_add),
-            Opcode::Div => binary_op!(machine, wrapping_div),
-            Opcode::Mul => binary_op!(machine, wrapping_mul),
-            Opcode::Sub => binary_op_save_flags!(machine, wrapping_sub),
-            Opcode::And => binary_op_save_flags!(machine, bitand),
-            Opcode::Or => binary_op_save_flags!(machine, bitor),
-            Opcode::Xor => binary_op_save_flags!(machine, bitxor),
-            Opcode::Cmp => {
-                // using asm instead here, because compiler would optimize
-                // out unused variable
-                asm!("cmp {}, {}",
-                    in(reg) read_unaligned(machine.sp.sub(1)),
-                    in(reg) read_unaligned(machine.sp)
-                );
-                machine.set_rflags();
-            }
-            Opcode::Vmctx => {
-                // pushes machine ptr on the stack
-                write_unaligned(machine.sp.add(1), machine as *const _ as u64);
-                machine.sp = machine.sp.add(1);
-            }
-            Opcode::Vmexit => {
-                let exit_ip = read_unaligned(machine.sp);
-                machine.sp = machine.sp.sub(1);
-                let vmexit: extern "C" fn(&mut Machine, u64) =
-                    core::mem::transmute(machine.vmexit);
-                vmexit(machine, exit_ip);
-            }
-        }
-    }
-}

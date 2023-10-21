@@ -153,7 +153,6 @@ impl Virtualizer {
         self.asm.assemble()
     }
 
-    // todo set flags in interpreter
     fn virtualize_inst(&mut self, inst: &Instruction) {
         match inst.mnemonic() {
             Mnemonic::Mov => self.mov(inst),

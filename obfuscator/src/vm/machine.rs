@@ -168,7 +168,7 @@ impl Machine {
 
         let mut a = CodeAssembler::new(64)?;
 
-        // todo this is kinda up, since its a
+        // todo this is kinda ub, since its a
         // potential use after free
         a.mov(rax, &mut m as *mut _ as u64)?;
 
@@ -187,7 +187,7 @@ impl Machine {
         a.mov(rsp, vm_rsp)?;
 
         a.mov(rcx, rax)?;
-        a.mov(rax, Self::run as u64)?; // TODO translate to assembly? probably or patch into target binary
+        a.mov(rax, Self::run as u64)?;
         a.jmp(rax)?;
 
         // TODO this is what gets patched into the target file
@@ -247,12 +247,6 @@ impl Machine {
         self.rflags = x86::bits64::rflags::read();
     }
 
-    // TODO to make this useable static in a patched binary, i have to translate the
-    // program to assembly like in the machine::new function
-    // this is currently JIT (just in time) have to translate to
-    // AOT (Ahead of time) but idk if that makes sense because then its
-    // literally the same as if its not virtualized like what urgh
-    // gotta check virtualizer protector projects to understand
     #[allow(clippy::missing_safety_doc)]
     pub unsafe extern "C" fn run(&mut self) {
         self.pc = self.program.as_ptr();
