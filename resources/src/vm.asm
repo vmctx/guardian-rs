@@ -87,6 +87,7 @@ vmenter:
     // pop would probably work so do that
     // then lea/mov rdx, module_base + rdx
     // or something like that
+    // actually its rip relative so rip + 0x47 is that below as exmp
     // pop rdx
     lea rdx, [rip + BYTECODE]
     // run(&mut Machine, program);

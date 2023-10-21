@@ -3,6 +3,7 @@ mod pe;
 mod vm;
 
 use std::fs;
+use std::fs::File;
 use std::mem::size_of_val;
 
 use crate::diassembler::Disassembler;
@@ -39,6 +40,7 @@ use crate::vm::virtualizer::{virtualize, virtualize_with_ip};
 use exe::{Buffer, CCharString, Error, ImageSectionHeader, NTHeadersMut, PE, PEType, RVA, SectionCharacteristics, VecPE};
 use iced_x86::code_asm::AsmRegister64;
 use memoffset::offset_of;
+use symbolic_demangle::Demangle;
 
 fn main() {
     let mut a = Assembler::default();
@@ -72,8 +74,18 @@ fn main() {
     let test = 0x1000 - 0x100 - std::mem::size_of::<u64>();
     println!("test: {:x}", test);
     // "../reddeadonline/target/x86_64-pc-windows-msvc/release-lto/loader.exe"
+    let map_data = std::fs::read("../hello_world/target/release/hello_world.map").unwrap();
+    let map_string = String::from_utf8(map_data).unwrap();
+    let mut map_file = pe::parser::MapFile::load(&map_string).unwrap();
+    println!("{}", map_file.functions.len());
+
+    let (function, function_size) = map_file.get_function("hello_world::calc").unwrap();
+    println!("target function: {}: {:x}", function.symbol, function_size);
+
     let mut pefile = VecPE::from_disk_file("../hello_world/target/release/hello_world.exe").unwrap();
 
+    let target_function = pefile.get_slice_ref::<u8>(pefile.rva_to_offset(RVA(function.rva.0 as _)).unwrap().0 as _, function_size).expect("rawr");
+    println!("real size: {:x}", Disassembler::from_bytes(target_function.to_vec()).disassemble());
     // relocating will probably be done dynamically
     // have to mark them as relocate somehow
     // but for jmps i need to be able to identify label with target

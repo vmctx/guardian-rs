@@ -1,3 +1,4 @@
+use iced_x86::FlowControl;
 use crate::virtualize;
 use crate::vm::machine::disassemble;
 
@@ -15,7 +16,7 @@ impl Disassembler {
         Self { bytes }
     }
 
-    pub fn disassemble(&self) {
+    pub fn disassemble(&self) -> usize {
         use iced_x86::{Decoder, DecoderOptions, Formatter, Instruction, NasmFormatter};
 
         let mut decoder =
@@ -35,6 +36,8 @@ impl Disassembler {
 
         // Initialize this outside the loop because decode_out() writes to every field
         let mut instruction = Instruction::default();
+
+        let mut function_size = 0;
 
         // The decoder also implements Iterator/IntoIterator so you could use a for loop:
         //      for instruction in &mut decoder { /* ... */ }
@@ -67,7 +70,45 @@ impl Disassembler {
             println!(" {}", output);
 
 
+            match instruction.flow_control() {
+                FlowControl::Return => {
+                    // detect if its not real function end
+                    function_size += instruction.len();
+
+                    if self
+                        .bytes
+                        .get((instruction.ip()) as usize + 2)
+                        .is_none()
+                        || is_end_of_function(
+                        self.bytes[(instruction.ip()) as usize + 1],
+                        self.bytes[(instruction.ip()) as usize + 2],
+                    )
+                    {
+                        break;
+                    }
+                }
+                FlowControl::Interrupt => break,
+                FlowControl::Exception => {
+                    if instruction.is_invalid() {
+                        break;
+                    }
+                }
+                _ => function_size += instruction.len(),
+            }
+
             //println!("{}", disassemble(&virtualize(instr_bytes)).unwrap());
         }
+
+        function_size
     }
+}
+
+fn is_end_of_function(instr: u8, next_instr: u8) -> bool {
+    instr == 0xCC
+        || instr == 0xFF
+        || (instr == 0x48
+        || instr == 0x55
+        || instr == 0x50
+        || (instr == 0x41 && next_instr == 0x56)
+        || (instr == 0x41 && next_instr == 0x57))
 }
