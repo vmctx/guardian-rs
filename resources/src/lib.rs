@@ -168,15 +168,14 @@ pub struct Machine {
 
 impl Machine {
     #[no_mangle]
-    #[inline(never)]
-    pub unsafe extern "C" fn new_vm() -> Self {
-        Self {
+    pub unsafe extern "C" fn new_vm(out: *mut Self) {
+        *out = Self {
             pc: core::ptr::null(),
             sp: core::ptr::null_mut(),
             regs: [0; 16],
             rflags: 0,
             vmstack: vec![0u64; 0x1000],
-        }
+        };
     }
 
     #[allow(clippy::missing_safety_doc)]

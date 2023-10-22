@@ -47,6 +47,7 @@ pop     rbx
 .endmacro
 
 vmentry:
+   // avoid new_vm call from changing registers like that
     pushvol
     // i need to get value pushed on the stack
     // before pushgp
@@ -55,8 +56,11 @@ vmentry:
     // push bytecode_location
     // jmp vmentry
     //
-    jmp new_vm // stores machine in rax?
-    // avoid new_vm call from changing registers like that
+    sub rsp, 0xb0 // size_of machine
+    mov rcx, rsp
+    call new_vm
+    add rsp, 0xb0
+    mov rax, rcx
     popvol
     jmp vmenter
 
