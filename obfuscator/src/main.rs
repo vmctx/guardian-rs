@@ -140,25 +140,25 @@ fn main() {
     //
 
     // create machine linking to program at start of bytecode section
-  /*
-    let nt_headers = pefile.get_valid_mut_nt_headers();
-    assert!(nt_headers.is_ok());
-    if let NTHeadersMut::NTHeaders64(nt_headers_64) = nt_headers.unwrap() {
-        generate_vm_entry(
-            &mut vm1,
-           machine_addr as u64,
-            nt_headers_64.optional_header.image_base as usize + (vm_section.virtual_address.0 + machine_entry.0 - 0x1000) as usize);
-    }
-    println!("{:?}", vm1.vmenter.clone().to_vec());
-    Disassembler::from_bytes(vm1.vmenter.clone().to_vec()).disassemble();
-    generate_vm_exit(&mut vm1);
-    println!("{:?}", vm1.vmexit.clone().to_vec());
-    println!("--------------------------------");
-    Disassembler::from_bytes(vm1.vmexit.clone().to_vec()).disassemble();
-    let mut buffer = vec![0u8; size_of_val(&vm1)];
-    unsafe { std::ptr::copy(&vm1 as *const _ as *const u8, buffer.as_mut_ptr(), size_of_val(&vm1))}
-    add_data(&mut pefile, &buffer);
-   */
+    /*
+      let nt_headers = pefile.get_valid_mut_nt_headers();
+      assert!(nt_headers.is_ok());
+      if let NTHeadersMut::NTHeaders64(nt_headers_64) = nt_headers.unwrap() {
+          generate_vm_entry(
+              &mut vm1,
+             machine_addr as u64,
+              nt_headers_64.optional_header.image_base as usize + (vm_section.virtual_address.0 + machine_entry.0 - 0x1000) as usize);
+      }
+      println!("{:?}", vm1.vmenter.clone().to_vec());
+      Disassembler::from_bytes(vm1.vmenter.clone().to_vec()).disassemble();
+      generate_vm_exit(&mut vm1);
+      println!("{:?}", vm1.vmexit.clone().to_vec());
+      println!("--------------------------------");
+      Disassembler::from_bytes(vm1.vmexit.clone().to_vec()).disassemble();
+      let mut buffer = vec![0u8; size_of_val(&vm1)];
+      unsafe { std::ptr::copy(&vm1 as *const _ as *const u8, buffer.as_mut_ptr(), size_of_val(&vm1))}
+      add_data(&mut pefile, &buffer);
+     */
 
     // todo generate code that replaces original code (in this case there is none)
     // via dynasm referring to bytecode section with offset and to vm section
@@ -181,22 +181,22 @@ fn main() {
 }
 
 fn patch_function(pefile: &mut VecPE, target_fn: usize, target_fn_size: usize, vm_rva: u32, bytecode_rva: u32) -> usize {
-/*
-    for index in 0..pefile.get_buffer().len() {
-        if index >= target_fn && index <= target_fn + target_fn_size {
-            pefile.remove(index);
+    /*
+        for index in 0..pefile.get_buffer().len() {
+            if index >= target_fn && index <= target_fn + target_fn_size {
+                pefile.remove(index);
+            }
         }
-    }
- */
+     */
     let target_fn_rva = pefile.offset_to_rva(Offset(target_fn as u32)).unwrap();
     let mut a = CodeAssembler::new(64).unwrap();
     // todo add relocs
     // todo get the fcking right address!!
-/*
-    let mut push = Decoder::new(64, &vec![0xff, 0x35, 0x00, 0x00, 0x00, 0x00], 0).decode();
-    push.set_memory_displacement64(bytecode_rva as u64 - target_fn_rva.0 as u64);
-    a.add_instruction(push).unwrap();
- */
+    /*
+        let mut push = Decoder::new(64, &vec![0xff, 0x35, 0x00, 0x00, 0x00, 0x00], 0).decode();
+        push.set_memory_displacement64(bytecode_rva as u64 - target_fn_rva.0 as u64);
+        a.add_instruction(push).unwrap();
+     */
 
     println!("{:x}",  pefile.get_image_base().unwrap());
     println!("rva: {:x}", vm_rva as u64  as u64);
@@ -204,11 +204,11 @@ fn patch_function(pefile: &mut VecPE, target_fn: usize, target_fn_size: usize, v
     a.push(bytecode_rva as i32).unwrap();
     a.jmp(vm_rva as u64 - target_fn_rva.0 as u64).unwrap();
 
-/*
-    let pedata = pefile.clone();
-    let mut relocs = RelocationDirectory::parse(&pedata).unwrap();
-    { relocs.add_relocation(pefile, RVA(vm_rva)).unwrap(); }
- */
+    /*
+        let pedata = pefile.clone();
+        let mut relocs = RelocationDirectory::parse(&pedata).unwrap();
+        { relocs.add_relocation(pefile, RVA(vm_rva)).unwrap(); }
+     */
 
     let patch = a.assemble(0).unwrap();
 

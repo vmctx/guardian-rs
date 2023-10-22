@@ -10,7 +10,7 @@ use core::arch::asm;
 use core::convert::TryFrom;
 use core::mem::size_of;
 use core::ops::{BitAnd, BitOr, BitXor};
-use core::ptr::{read_unaligned, write_unaligned};
+use core::ptr::{addr_of_mut, drop_in_place, read_unaligned, write_unaligned};
 
 use x86::bits64::rflags::RFlags;
 
@@ -223,6 +223,7 @@ impl Machine {
                     self.sp = self.sp.add(1);
                 }
                 Opcode::Vmexit => {
+                    drop_in_place(addr_of_mut!((*self).vmstack));
                     vmexit(self);
                 }
             }

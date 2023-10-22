@@ -4,7 +4,6 @@ use winapi::ctypes::c_void;
 pub struct Allocator;
 
 use crate::syscalls::NtFreeVirtualMemory;
-
 use crate::syscalls::NtAllocateVirtualMemory;
 
 unsafe impl GlobalAlloc for Allocator {
