@@ -7,7 +7,6 @@ members = [
 
 [profile.dev]
 panic = "abort"
-debug-assertions = false
 
 [profile.release]
 panic = "abort"

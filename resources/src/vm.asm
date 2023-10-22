@@ -56,16 +56,17 @@ vmentry:
     // push bytecode_location
     // jmp vmentry
     //
-    sub rsp, 0xb0 // size_of machine
+    sub rsp, {sizeof_machine}
     mov rcx, rsp
     call new_vm
-    add rsp, 0xb0
+    add rsp, {sizeof_machine}
     mov rax, rcx
     popvol
     jmp vmenter
 
 vmenter:
     // move registers into machines registerswdym
+    add rsp, 8 // because i didnt pop the bytecode ptr yet
     mov [rax + 0x10], rax
     mov [rax + 0x18], rcx
     mov [rax + 0x20], rdx
@@ -82,17 +83,14 @@ vmenter:
     mov [rax + 0x78], r13
     mov [rax + 0x80], r14
     mov [rax + 0x88], r15
+    sub rsp, 8 // fix stack ptr back to be able to pop it
     // &mut Machine
     mov rcx,          rax
-    // pop wouldnt work here, use mov with offset from rsp
-    // 14*8 = 112 = 0x70
-    // move rdx, [rsp + 0x70]
-    // pop would probably work so do that
-    // then lea/mov rdx, module_base + rdx
-    // or something like that
-    // actually its rip relative so rip + 0x47 is that below as exmp
-    // pop rdx
-    lea rdx, [rip + BYTECODE]
+    // pop bytecode ptr, add it to image base addr = boom
+    mov rax, qword ptr gs:[0x60]
+    mov rax, [rax + 0x10]
+    pop rdx
+    lea rdx, [rax + rdx]
     // run(&mut Machine, program);
     jmp run
 
