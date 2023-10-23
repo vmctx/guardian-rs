@@ -14,13 +14,6 @@ use core::ptr::{addr_of_mut, drop_in_place, read_unaligned, write_unaligned};
 
 use x86::bits64::rflags::RFlags;
 
-use assembler::prelude::{Reg32::*, Reg64::*};
-use assembler::prelude::Mov;
-use assembler::Reg64;
-
-use crate::assembler::Reg32;
-use crate::assembler::prelude::Jmp;
-
 use crate::vm::vmexit;
 
 #[panic_handler]
@@ -56,73 +49,6 @@ pub enum Opcode {
     Cmp,
     Vmctx,
     Vmexit,
-}
-
-#[repr(u8)]
-#[derive(num_enum::IntoPrimitive)]
-pub enum Register {
-    Rax,
-    Rcx,
-    Rdx,
-    Rbx,
-    Rsp,
-    Rbp,
-    Rsi,
-    Rdi,
-    R8,
-    R9,
-    R10,
-    R11,
-    R12,
-    R13,
-    R14,
-    R15,
-}
-
-impl From<Reg64> for Register {
-    fn from(reg: Reg64) -> Self {
-        match reg {
-            rax => Register::Rax,
-            rcx => Register::Rcx,
-            rdx => Register::Rdx,
-            rbx => Register::Rbx,
-            rsp => Register::Rsp,
-            rbp => Register::Rbp,
-            rsi => Register::Rsi,
-            rdi => Register::Rdi,
-            r8 => Register::R8,
-            r9 => Register::R9,
-            r10 => Register::R10,
-            r11 => Register::R11,
-            r12 => Register::R12,
-            r13 => Register::R13,
-            r14 => Register::R14,
-            r15 => Register::R15,
-        }
-    }
-}
-
-impl From<Reg32> for Register {
-    fn from(reg: Reg32) -> Self {
-        match reg {
-            eax => Register::Rax,
-            ecx => Register::Rcx,
-            edx => Register::Rdx,
-            ebx => Register::Rbx,
-            esp => Register::Rsp,
-            ebp => Register::Rbp,
-            esi => Register::Rsi,
-            edi => Register::Rdi,
-            r8d => Register::R8,
-            r9d => Register::R9,
-            r10d => Register::R10,
-            r11d => Register::R11,
-            r12d => Register::R12,
-            r13d => Register::R13,
-            r14d => Register::R14,
-            r15d => Register::R15,
-        }
-    }
 }
 
 macro_rules! binary_op {
@@ -203,6 +129,7 @@ impl Machine {
                 }
                 Opcode::Add => binary_op!(self, wrapping_add),
                 Opcode::Div => binary_op!(self, wrapping_div),
+                // imul
                 Opcode::Mul => binary_op!(self, wrapping_mul),
                 Opcode::Sub => binary_op_save_flags!(self, wrapping_sub),
                 Opcode::And => binary_op_save_flags!(self, bitand),

@@ -42,6 +42,7 @@ use iced_x86::code_asm::{AsmRegister64, CodeAssembler};
 use iced_x86::Decoder;
 use memoffset::offset_of;
 use symbolic_demangle::Demangle;
+use crate::pe::parser::MapFile;
 
 fn main() {
     let mut a = Assembler::default();
@@ -80,6 +81,33 @@ fn main() {
     let mut map_file = pe::parser::MapFile::load(&map_string).unwrap();
     println!("{}", map_file.functions.len());
 
+    // get list of function names as strings/literals, pass them to a function that
+    // iterates map file and searches for all of these functions then virtualizes them
+    // and appends the virtualized data to a vector, also have a second vector containing
+    // info abt the virtualized functions and offset in the first vector to bytecode
+    //
+    //let (bytecode, virtualized_fns) = virtualize_functions(&["hello_world::calc"]);
+    // virtualized fns is a Vec<VirtualizedFn> or something
+    // insert bytecode into bytecode section then patch functions
+    /*
+    struct VirtualizedFn {
+        rva: RVA,
+        size: u32,
+        bytecode_offset: RVA
+    }
+
+    for function in virtualized_fns.iter() {
+        patch_function(
+            &mut pefile,
+            function.rva,
+            function.size,
+            vm_section.virtual_address.0 + machine_entry.0 - 0x1000,
+           bytecode_section.virtual_address.0 + function.bytecode_offset
+        );
+    }
+     */
+    //
+
     let (function, function_size) = map_file.get_function("hello_world::calc").unwrap();
     println!("target function: {}: {:x}", function.symbol, function_size);
 
@@ -88,23 +116,17 @@ fn main() {
     // relocating will probably be done dynamically
     // have to mark them as relocate somehow
     // but for jmps i need to be able to identify label with target
-    let data: Vec<u8> = virtualize_with_ip(0000000180000000, &[  0x89, 0x4c, 0x24, 0x08, 0x8b, 0x44, 0x24, 0x08, 0x0f, 0xaf, 0x44, 0x24, 0x08, 0xc2, 0x00,
-        0x00,]);
-    println!("{:?}", &data);
+    let (bytecode, virtualized_fns) = virtualize_functions(&pefile, map_file, &["hello_world::calc"]);
 
-    let m = Machine::new(&data).unwrap();
-    let f: extern "C" fn(i32) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
-    assert_eq!(f(2), 4);
-    println!("{}", f(6));
     let mut bytecode_section = ImageSectionHeader::default();
     bytecode_section.set_name(Some(".byte"));
     bytecode_section.virtual_size = 0x1000;
-    bytecode_section.size_of_raw_data = data.len() as u32;
+    bytecode_section.size_of_raw_data = bytecode.len() as u32;
     bytecode_section.characteristics = SectionCharacteristics::MEM_EXECUTE
         | SectionCharacteristics::MEM_READ
         | SectionCharacteristics::CNT_CODE;
 
-    let bytecode_section = add_section(&mut pefile, &bytecode_section, &data).unwrap();
+    let bytecode_section = add_section(&mut pefile, &bytecode_section, &bytecode).unwrap();
 
     // todo place all the bytecode into the bytecode section for every virtualized code part
     // in this case it would just be data
@@ -129,14 +151,15 @@ fn main() {
     // todo include compiled machine into vm section (look independent shellcode maybe as reference)
     let vm_section = add_section(&mut pefile, &vm_section, &machine.to_vec()).unwrap();
 
-    // test patching
-    let target_fn_addr = pefile.rva_to_offset(RVA(function.rva.0 as _)).unwrap().0 as _;
-    let target_function = pefile.get_slice_ref::<u8>(target_fn_addr, function_size).expect("rawr");
-    let function_size = Disassembler::from_bytes(target_function.to_vec()).disassemble();
-    println!("real size: {:x}", function_size);
-    let patch_len = patch_function(&mut pefile, target_fn_addr, function_size, vm_section.virtual_address.0 + machine_entry.0 - 0x1000, bytecode_section.virtual_address.0);
-    let target_function_mut = pefile.get_slice_ref::<u8>(target_fn_addr, patch_len).expect("rawr");
-    Disassembler::from_bytes(target_function_mut.to_vec()).disassemble();
+    for function in virtualized_fns.iter() {
+        patch_function(
+            &mut pefile,
+            function.rva,
+            function.size,
+            vm_section.virtual_address.0 + machine_entry.0 - 0x1000,
+            bytecode_section.virtual_address.0 + function.bytecode_offset as u32
+        );
+    }
     //
 
     // create machine linking to program at start of bytecode section
@@ -166,18 +189,44 @@ fn main() {
     // see loader for dynasm usage
 
     // rewriting entry point to data
-
-
-    let patched_entry = pefile.offset_to_rva(Offset(target_fn_addr as _)).unwrap();
-    let nt_headers = pefile.get_valid_mut_nt_headers();
-    assert!(nt_headers.is_ok());
-
-
-
     //
 
     pefile.recreate_image(PEType::Disk).unwrap();
     pefile.save("../hello_world/target/release/hello_world_modded.exe").unwrap();
+}
+
+struct VirtualizedFn {
+    rva: usize,
+    size: usize,
+    bytecode_offset: usize,
+}
+
+fn virtualize_functions(pefile: &VecPE, map_file: MapFile, functions: &[&str]) -> (Vec<u8>, Vec<VirtualizedFn>) {
+    let mut bytecode = Vec::new();
+    let mut virtualized_fns = Vec::new();
+
+    for function in functions {
+        let (function, function_size) = map_file.get_function(function).unwrap();
+        println!("found target function: {}: {:x}:{}", function.symbol, function.rva.0, function_size);
+        let target_fn_addr = pefile.rva_to_offset(RVA(function.rva.0 as _)).unwrap().0 as _;
+        let target_function = pefile.get_slice_ref::<u8>(target_fn_addr, function_size).unwrap();
+        let function_size = Disassembler::from_bytes(target_function.to_vec()).disassemble();
+        // get again but with "real" (hopefully) size
+        let target_function = pefile.get_slice_ref::<u8>(target_fn_addr, function_size).unwrap();
+        let mut virtualized_function = virtualize_with_ip(
+            pefile.get_image_base().unwrap() + function.rva.0 as u64,
+            target_function
+        );
+        virtualized_fns.push(VirtualizedFn {
+            rva: function.rva.0,
+            size: function_size,
+            bytecode_offset: bytecode.len(), // todo should be correct ?
+        });
+        bytecode.append(&mut virtualized_function);
+        println!("added target function: {}: {:x}:{}", function.symbol, function.rva.0, function_size);
+    }
+
+    (bytecode, virtualized_fns)
 }
 
 fn patch_function(pefile: &mut VecPE, target_fn: usize, target_fn_size: usize, vm_rva: u32, bytecode_rva: u32) -> usize {
@@ -188,7 +237,6 @@ fn patch_function(pefile: &mut VecPE, target_fn: usize, target_fn_size: usize, v
             }
         }
      */
-    let target_fn_rva = pefile.offset_to_rva(Offset(target_fn as u32)).unwrap();
     let mut a = CodeAssembler::new(64).unwrap();
     // todo add relocs
     // todo get the fcking right address!!
@@ -198,11 +246,12 @@ fn patch_function(pefile: &mut VecPE, target_fn: usize, target_fn_size: usize, v
         a.add_instruction(push).unwrap();
      */
 
-    println!("{:x}",  pefile.get_image_base().unwrap());
-    println!("rva: {:x}", vm_rva as u64  as u64);
+    println!("{:x}", pefile.get_image_base().unwrap());
+    println!("rva: {:x}", vm_rva as u64 as u64);
+    println!("fn rva: {:x}", target_fn as u64 as u64);
     println!("xor : {:x}", bytecode_rva.bitxor(vm_rva).bitxor(vm_rva));
     a.push(bytecode_rva as i32).unwrap();
-    a.jmp(vm_rva as u64 - target_fn_rva.0 as u64).unwrap();
+    a.jmp(vm_rva as u64 - target_fn as u64).unwrap();
 
     /*
         let pedata = pefile.clone();
@@ -212,9 +261,10 @@ fn patch_function(pefile: &mut VecPE, target_fn: usize, target_fn_size: usize, v
 
     let patch = a.assemble(0).unwrap();
 
-    println!("{:x}", target_fn_rva.0);
+    println!("{:x}", target_fn);
 
-    let target_function_mut = pefile.get_mut_slice_ref::<u8>(target_fn, patch.len()).unwrap();
+    let target_fn_offset = pefile.rva_to_offset(RVA(target_fn as u32)).unwrap();
+    let target_function_mut = pefile.get_mut_slice_ref::<u8>(target_fn_offset.0 as usize, patch.len()).unwrap();
     target_function_mut.copy_from_slice(patch.as_slice());
     //pefile.get_mut_section_by_name(".text".to_string()).unwrap().
     pefile.pad_to_alignment().unwrap();

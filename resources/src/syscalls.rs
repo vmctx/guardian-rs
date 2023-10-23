@@ -1,6 +1,6 @@
 use core::arch::global_asm;
 use winapi::shared::basetsd::{PSIZE_T, ULONG_PTR};
-use winapi::shared::ntdef::{HANDLE, NTSTATUS, PULONG, PVOID, ULONG,
+use winapi::shared::ntdef::{HANDLE, NTSTATUS, PVOID, ULONG,
 };
 
 // https://j00ru.vexillium.org/syscalls/nt/64/
@@ -18,13 +18,6 @@ extern "C" {
         base_address: *mut PVOID,
         region_size: PSIZE_T,
         free_type: ULONG,
-    ) -> NTSTATUS;
-    pub fn NtProtectVirtualMemory(
-        process_handle: HANDLE,
-        base_address: *mut PVOID,
-        region_size: PSIZE_T,
-        new_protect: ULONG,
-        old_protect: PULONG,
     ) -> NTSTATUS;
 }
 
