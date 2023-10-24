@@ -1,112 +1,28 @@
+use std::ops::BitXor;
+
+use exe::{Buffer, CCharString, Error, ImageSectionHeader, PE, PEType, RVA, SectionCharacteristics, VecPE};
+use iced_x86::code_asm::CodeAssembler;
+use symbolic_demangle::Demangle;
+
+use crate::diassembler::Disassembler;
+use crate::pe::parser::MapFile;
+use crate::vm::virtualizer::{virtualize, virtualize_with_ip};
+
 mod diassembler;
 mod pe;
 mod vm;
-
-use std::fs;
-use std::fs::File;
-use std::mem::size_of_val;
-use std::ops::BitXor;
-
-use crate::diassembler::Disassembler;
-use crate::vm::machine::{Assembler, disassemble, Machine, Register};
-use crate::vm::virtualizer::{virtualize, virtualize_with_ip};
 
 // virtualization of code that is in between a call of function like begin_virtualization and end_virtualization
 // which are imported from a stub dll, the code is virtualized, a machine is created from the virtual code and the
 // original code segment is replaced by the vmentry of the machine
 
 
-// todo
-// i need to somehow embed the machine.rs as a new section
-// OR run machine and embed the run function as a new section
-// which is probably easier
-// so then i create a machine from code i disassemble in the binary
-// so the machine instead of allocating vmenter and exit in the heap
-// needs to do so by creating it ahead of time in a section for
-// every virtualized function/code block
-// then it might be easier to just compile the machine
-// and create it dynamically by using something like this
-// lea arg1, bytecode
-// mov rax, machine::new
-// call rax // create new machine
-// lea rax, ret_val.vm_enter
-// call rax // executes vm
-// if not then see below:
-// and replace the code with something like (pseudo asm)
-// mov arg1, machineforthiscode (section .machines offset 0x6900)
-// lea rax, virtual machine (run function, section .vm offset 0)
-// call rax (call run function with ptr to machine struct)
-
-use exe::{Buffer, CCharString, Error, ImageSectionHeader, NTHeadersMut, Offset, PE, PEType, RelocationDirectory, RVA, SectionCharacteristics, VecPE};
-use iced_x86::code_asm::{AsmRegister64, CodeAssembler};
-use iced_x86::Decoder;
-use memoffset::offset_of;
-use symbolic_demangle::Demangle;
-use crate::pe::parser::MapFile;
-
 fn main() {
-    let mut a = Assembler::default();
-    let x = 8u64;
-    let y = 8u64;
-    let mut z = 0u64;
-
-    a.const_(&x as *const _ as u64);
-    a.load();
-    a.const_(&y as *const _ as u64);
-    a.load();
-    a.cmp();
-    a.add();
-    a.const_(&mut z as *mut _ as u64);
-    a.store();
-
-    unsafe { Machine::new(&a.assemble()).unwrap().run() };
-    assert_eq!(z, 16);
-    #[repr(C)]
-    pub struct TestMachine {
-        pub(crate) pc: *const u8,
-        pub(crate) sp: *mut u64,
-        pub regs: [u64; 16],
-        pub rflags: u64,
-        pub(crate) program: *const u8,
-        pub(crate) vmstack: Vec<u64>,
-        pub(crate) cpustack: Vec<u8>,
-        pub cpustack_ptr: *const u8,
-        vmexit: *const u64,
-    }
-    let test = 0x1000 - 0x100 - std::mem::size_of::<u64>();
-    println!("test: {:x}", test);
     // "../reddeadonline/target/x86_64-pc-windows-msvc/release-lto/loader.exe"
     let map_data = std::fs::read("../hello_world/target/release/hello_world.map").unwrap();
     let map_string = String::from_utf8(map_data).unwrap();
     let mut map_file = pe::parser::MapFile::load(&map_string).unwrap();
     println!("{}", map_file.functions.len());
-
-    // get list of function names as strings/literals, pass them to a function that
-    // iterates map file and searches for all of these functions then virtualizes them
-    // and appends the virtualized data to a vector, also have a second vector containing
-    // info abt the virtualized functions and offset in the first vector to bytecode
-    //
-    //let (bytecode, virtualized_fns) = virtualize_functions(&["hello_world::calc"]);
-    // virtualized fns is a Vec<VirtualizedFn> or something
-    // insert bytecode into bytecode section then patch functions
-    /*
-    struct VirtualizedFn {
-        rva: RVA,
-        size: u32,
-        bytecode_offset: RVA
-    }
-
-    for function in virtualized_fns.iter() {
-        patch_function(
-            &mut pefile,
-            function.rva,
-            function.size,
-            vm_section.virtual_address.0 + machine_entry.0 - 0x1000,
-           bytecode_section.virtual_address.0 + function.bytecode_offset
-        );
-    }
-     */
-    //
 
     let (function, function_size) = map_file.get_function("hello_world::calc").unwrap();
     println!("target function: {}: {:x}", function.symbol, function_size);
@@ -148,7 +64,6 @@ fn main() {
         | SectionCharacteristics::MEM_READ
         | SectionCharacteristics::CNT_CODE;
 
-    // todo include compiled machine into vm section (look independent shellcode maybe as reference)
     let vm_section = add_section(&mut pefile, &vm_section, &machine.to_vec()).unwrap();
 
     for function in virtualized_fns.iter() {
@@ -160,36 +75,6 @@ fn main() {
             bytecode_section.virtual_address.0 + function.bytecode_offset as u32
         );
     }
-    //
-
-    // create machine linking to program at start of bytecode section
-    /*
-      let nt_headers = pefile.get_valid_mut_nt_headers();
-      assert!(nt_headers.is_ok());
-      if let NTHeadersMut::NTHeaders64(nt_headers_64) = nt_headers.unwrap() {
-          generate_vm_entry(
-              &mut vm1,
-             machine_addr as u64,
-              nt_headers_64.optional_header.image_base as usize + (vm_section.virtual_address.0 + machine_entry.0 - 0x1000) as usize);
-      }
-      println!("{:?}", vm1.vmenter.clone().to_vec());
-      Disassembler::from_bytes(vm1.vmenter.clone().to_vec()).disassemble();
-      generate_vm_exit(&mut vm1);
-      println!("{:?}", vm1.vmexit.clone().to_vec());
-      println!("--------------------------------");
-      Disassembler::from_bytes(vm1.vmexit.clone().to_vec()).disassemble();
-      let mut buffer = vec![0u8; size_of_val(&vm1)];
-      unsafe { std::ptr::copy(&vm1 as *const _ as *const u8, buffer.as_mut_ptr(), size_of_val(&vm1))}
-      add_data(&mut pefile, &buffer);
-     */
-
-    // todo generate code that replaces original code (in this case there is none)
-    // via dynasm referring to bytecode section with offset and to vm section
-    // for turning bytecode into machine that runs
-    // see loader for dynasm usage
-
-    // rewriting entry point to data
-    //
 
     pefile.recreate_image(PEType::Disk).unwrap();
     pefile.save("../hello_world/target/release/hello_world_modded.exe").unwrap();
