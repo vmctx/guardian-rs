@@ -51,6 +51,27 @@ pub enum Opcode {
     Vmexit,
 }
 
+#[repr(u8)]
+#[derive(num_enum::IntoPrimitive)]
+pub enum Register {
+    Rax,
+    Rcx,
+    Rdx,
+    Rbx,
+    Rsp,
+    Rbp,
+    Rsi,
+    Rdi,
+    R8,
+    R9,
+    R10,
+    R11,
+    R12,
+    R13,
+    R14,
+    R15,
+}
+
 macro_rules! binary_op {
     ($self:ident, $op:ident) => {{
         let result = read_unaligned($self.sp.sub(1)).$op(read_unaligned($self.sp));

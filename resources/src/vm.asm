@@ -49,13 +49,6 @@ pop     rbx
 vmentry:
    // avoid new_vm call from changing registers like that
     pushvol
-    // i need to get value pushed on the stack
-    // before pushgp
-    // push only accepts 32 bit immediates
-    // so it needs to be a relative virtual address
-    // push bytecode_location
-    // jmp vmentry
-    //
     sub rsp, {sizeof_machine}
     mov rcx, rsp
     call new_vm
@@ -65,24 +58,26 @@ vmentry:
     jmp vmenter
 
 vmenter:
+    // todo save rflags incase of rentering vm, be
+    // aware of instrs modifying rflags
     // move registers into machines registerswdym
     add rsp, 8 // because i didnt pop the bytecode ptr yet
-    mov [rax + 0x10], rax
-    mov [rax + 0x18], rcx
-    mov [rax + 0x20], rdx
-    mov [rax + 0x28], rbx
-    mov [rax + 0x30], rsp
-    mov [rax + 0x38], rbp
-    mov [rax + 0x40], rsi
-    mov [rax + 0x48], rdi
-    mov [rax + 0x50], r8
-    mov [rax + 0x58], r9
-    mov [rax + 0x60], r10
-    mov [rax + 0x68], r11
-    mov [rax + 0x70], r12
-    mov [rax + 0x78], r13
-    mov [rax + 0x80], r14
-    mov [rax + 0x88], r15
+    mov [rax + {rax}], rax
+    mov [rax + {rcx}], rcx
+    mov [rax + {rdx}], rdx
+    mov [rax + {rbx}], rbx
+    mov [rax + {rsp}], rsp
+    mov [rax + {rbp}], rbp
+    mov [rax + {rsi}], rsi
+    mov [rax + {rdi}], rdi
+    mov [rax + {r8}], r8
+    mov [rax + {r9}], r9
+    mov [rax + {r10}], r10
+    mov [rax + {r11}], r11
+    mov [rax + {r12}], r12
+    mov [rax + {r13}], r13
+    mov [rax + {r14}], r14
+    mov [rax + {r15}], r15
     sub rsp, 8 // fix stack ptr back to be able to pop it
     // &mut Machine
     mov rcx,          rax
@@ -95,20 +90,20 @@ vmenter:
     jmp run
 
 vmexit:
-    mov rax, [rcx + 0x10]
-    mov rdx, [rcx + 0x20]
-    // mov rbx, [rcx + 0x28]
-    mov rsp, [rcx + 0x30]
-    //mov rbp, [rcx + 0x38]
-    //mov rsi, [rcx + 0x40]
-    //mov rdi, [rcx + 0x48]
-    mov r8,  [rcx + 0x50]
-    mov r9,  [rcx + 0x58]
-    mov r10, [rcx + 0x60]
-    mov r11, [rcx + 0x68]
-    //mov r12, [rcx + 0x70]
-    //mov r13, [rcx + 0x78]
-    //mov r14, [rcx + 0x80]
-    //mov r15, [rcx + 0x88]
-    mov rcx, [rcx + 0x18]
+    mov rax, [rcx + {rax}]
+    mov rdx, [rcx + {rdx}]
+    // mov rbx, [rcx + 0x28] // non vol but unchanged
+    mov rsp, [rcx + {rsp}] // non vol
+    //mov rbp, [rcx + 0x38] // non vol but unchanged
+    mov rsi, [rcx + {rsi}] // non vol
+    mov rdi, [rcx + {rdi}] // non vol
+    mov r8,  [rcx + {r8}]
+    mov r9,  [rcx + {r9}]
+    mov r10, [rcx + {r10}]
+    mov r11, [rcx + {r11}]
+    //mov r12, [rcx + 0x70] // non vol but unchanged
+    //mov r13, [rcx + 0x78] // non vol but unchanged
+    //mov r14, [rcx + 0x80] // non vol but unchanged
+    //mov r15, [rcx + 0x88] // non vol but unchanged
+    mov rcx, [rcx + {rcx}]
     ret
