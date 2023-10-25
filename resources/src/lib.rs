@@ -49,7 +49,21 @@ pub enum Opcode {
     Cmp,
     Jmp,
     Vmctx,
+    VmAdd,
+    VmSub,
     Vmexit,
+}
+
+#[repr(u8)]
+#[derive(Debug, num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
+pub enum JmpCond {
+    Jmp,
+    Je,
+    Jne, //  Jnz,
+    Jbe, // Jna,
+    Ja, // Jnbe
+    Jle, // Jng
+    Jg, // Jnle
 }
 
 #[repr(u8)]
@@ -76,8 +90,6 @@ pub enum Register {
 macro_rules! binary_op {
     ($self:ident, $op:ident) => {{
         let result = read_unaligned($self.sp.sub(1)).$op(read_unaligned($self.sp));
-
-        $self.set_of_cf();
 
         write_unaligned(
             $self.sp.sub(1),
@@ -149,10 +161,10 @@ impl Machine {
                     write_unaligned(*self.sp as *mut u64, read_unaligned(self.sp.sub(1)));
                     self.sp = self.sp.sub(2);
                 }
-                Opcode::Add => binary_op!(self, wrapping_add),
                 Opcode::Div => binary_op!(self, wrapping_div),
                 // imul
                 Opcode::Mul => binary_op!(self, wrapping_mul),
+                Opcode::Add => binary_op_save_flags!(self, wrapping_add),
                 Opcode::Sub => binary_op_save_flags!(self, wrapping_sub),
                 Opcode::And => binary_op_save_flags!(self, bitand),
                 Opcode::Or => binary_op_save_flags!(self, bitor),
@@ -161,14 +173,35 @@ impl Machine {
                     // using asm instead here, because compiler would optimize
                     // out unused variable
                     asm!("cmp {}, {}",
-                    in(reg) read_unaligned(self.sp.sub(1)),
-                    in(reg) read_unaligned(self.sp)
+                        in(reg) read_unaligned(self.sp.sub(1)),
+                        in(reg) read_unaligned(self.sp)
                     );
                     self.set_rflags();
                 },
                 Opcode::Jmp => {
-                    self.pc = program.add(read_unaligned(self.pc as *const u64) as _);
+                    let do_jmp = match JmpCond::try_from(*self.pc).unwrap() {
+                        JmpCond::Jmp => true,
+                        JmpCond::Je => self.rflags.contains(RFlags::FLAGS_ZF),
+                        JmpCond::Jne => !self.rflags.contains(RFlags::FLAGS_ZF),
+                        JmpCond::Jbe => self.rflags.contains(RFlags::FLAGS_ZF)
+                            || self.rflags.contains(RFlags::FLAGS_CF),
+                        JmpCond::Ja => !self.rflags.contains(RFlags::FLAGS_ZF)
+                            || !self.rflags.contains(RFlags::FLAGS_CF),
+                        JmpCond::Jle => self.rflags.contains(RFlags::FLAGS_SF).bitxor(self.rflags.contains(RFlags::FLAGS_OF))
+                            || self.rflags.contains(RFlags::FLAGS_ZF),
+                        JmpCond::Jg => !self.rflags.contains(RFlags::FLAGS_ZF) && (self.rflags.contains(RFlags::FLAGS_SF) == self.rflags.contains(RFlags::FLAGS_OF))
+                    };
+
+                    self.pc = self.pc.add(1); // jmpcond
+
+                    if do_jmp {
+                        self.pc = program.add(read_unaligned(self.pc as *const u64) as _);
+                    } else {
+                        self.pc = self.pc.add(size_of::<u64>());
+                    }
                 }
+                Opcode::VmAdd => binary_op!(self, wrapping_add),
+                Opcode::VmSub => binary_op!(self, wrapping_sub),
                 Opcode::Vmctx => {
                     // pushes self ptr on the stack
                     write_unaligned(self.sp.add(1), self as *const _ as u64);
@@ -180,16 +213,6 @@ impl Machine {
                 }
             }
         }
-    }
-
-    // save carry and overflow cause why not
-    #[inline(always)]
-    pub fn set_of_cf(&mut self) {
-        let rflags = x86::bits64::rflags::read();
-        let mut rflags_new = RFlags::from_bits_truncate(self.rflags);
-        rflags_new.set(RFlags::FLAGS_OF, rflags.contains(RFlags::FLAGS_OF));
-        rflags_new.set(RFlags::FLAGS_CF, rflags.contains(RFlags::FLAGS_CF));
-        self.rflags = rflags_new.bits();
     }
 
     #[inline(always)]

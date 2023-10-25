@@ -22,7 +22,36 @@ pub enum Opcode {
     Cmp,
     Jmp,
     Vmctx,
+    VmAdd,
+    VmSub,
     Vmexit,
+}
+
+#[repr(u8)]
+#[derive(Debug, num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
+pub enum JmpCond {
+    Jmp,
+    Je,
+    Jne, //  Jnz,
+    Jbe, // Jna,
+    Ja, // Jnbe
+    Jle, // Jng
+    Jg, // Jnle
+}
+
+impl From<iced_x86::Mnemonic> for JmpCond {
+    fn from(mnemonic: iced_x86::Mnemonic) -> Self {
+        match mnemonic {
+            iced_x86::Mnemonic::Jmp => JmpCond::Jmp,
+            iced_x86::Mnemonic::Je => JmpCond::Je,
+            iced_x86::Mnemonic::Jne => JmpCond::Jne, // jnz is jne
+            iced_x86::Mnemonic::Jbe => JmpCond::Jbe, // jna is jbe
+            iced_x86::Mnemonic::Ja => JmpCond::Ja, // jnbe is ja
+            iced_x86::Mnemonic::Jle => JmpCond::Jle, // jng is jle
+            iced_x86::Mnemonic::Jg => JmpCond::Jg, // Jnle is jg
+            _ => panic!("unsupported jmp condition"),
+        }
+    }
 }
 
 #[repr(u8)]
@@ -90,8 +119,6 @@ macro_rules! binary_op {
     ($self:ident, $op:ident) => {{
         let result = read_unaligned($self.sp.sub(1)).$op(read_unaligned($self.sp));
 
-        $self.set_of_cf();
-
         write_unaligned(
             $self.sp.sub(1),
             result,
@@ -102,8 +129,14 @@ macro_rules! binary_op {
 }
 
 macro_rules! binary_op_save_flags {
-    ($self:ident, $op:ident) => {{
-        let result = read_unaligned($self.sp.sub(1)).$op(read_unaligned($self.sp));
+    ($self:ident, $op:literal) => {{
+        let mut result = read_unaligned($self.sp.sub(1));
+
+        // to avoid wrong compilation under debug
+        asm!(concat!($op, " {}, {}"),
+            inout(reg) result,
+            in(reg) read_unaligned($self.sp)
+        );
 
         $self.set_rflags();
 
@@ -198,8 +231,8 @@ impl Machine {
             // (&rbx, Register::Rbx.into()),
             (&rsp, Register::Rsp.into()),
             // (&rbp, Register::Rbp.into()),
-            // (&rsi, Register::Rsi.into()),
-            // (&rdi, Register::Rdi.into()),
+            (&rsi, Register::Rsi.into()),
+            (&rdi, Register::Rdi.into()),
             (&r8, Register::R8.into()),
             (&r9, Register::R9.into()),
             (&r10, Register::R10.into()),
@@ -264,23 +297,44 @@ impl Machine {
                     write_unaligned(*self.sp as *mut u64, read_unaligned(self.sp.sub(1)));
                     self.sp = self.sp.sub(2);
                 }
-                Opcode::Add => binary_op!(self, wrapping_add),
                 Opcode::Div => binary_op!(self, wrapping_div),
                 Opcode::Mul => binary_op!(self, wrapping_mul),
-                Opcode::Sub => binary_op_save_flags!(self, wrapping_sub),
-                Opcode::And => binary_op_save_flags!(self, bitand),
-                Opcode::Or => binary_op_save_flags!(self, bitor),
-                Opcode::Xor => binary_op_save_flags!(self, bitxor),
+                Opcode::Add => binary_op_save_flags!(self, "add"),
+                Opcode::Sub => binary_op_save_flags!(self, "sub"),
+                Opcode::And => binary_op_save_flags!(self, "and"),
+                Opcode::Or => binary_op_save_flags!(self, "or"),
+                Opcode::Xor => binary_op_save_flags!(self, "xor"),
                 Opcode::Cmp => {
                     asm!("cmp {}, {}",
                         in(reg) read_unaligned(self.sp.sub(1)),
                         in(reg) read_unaligned(self.sp)
                     );
                     self.set_rflags();
-                },
+                }
                 Opcode::Jmp => {
-                    self.pc = start_pc.add(read_unaligned(self.pc as *const u64) as _);
-                },
+                    let do_jmp = match JmpCond::try_from(*self.pc).unwrap() {
+                        JmpCond::Jmp => true,
+                        JmpCond::Je => self.rflags.contains(RFlags::FLAGS_ZF),
+                        JmpCond::Jne => !self.rflags.contains(RFlags::FLAGS_ZF),
+                        JmpCond::Jbe => self.rflags.contains(RFlags::FLAGS_ZF)
+                            || self.rflags.contains(RFlags::FLAGS_CF),
+                        JmpCond::Ja => !self.rflags.contains(RFlags::FLAGS_ZF)
+                            || !self.rflags.contains(RFlags::FLAGS_CF),
+                        JmpCond::Jle => self.rflags.contains(RFlags::FLAGS_SF).bitxor(self.rflags.contains(RFlags::FLAGS_OF))
+                            || self.rflags.contains(RFlags::FLAGS_ZF),
+                        JmpCond::Jg => !self.rflags.contains(RFlags::FLAGS_ZF) && (self.rflags.contains(RFlags::FLAGS_SF) == self.rflags.contains(RFlags::FLAGS_OF))
+                    };
+
+                    self.pc = self.pc.add(1); // jmpcond
+
+                    if do_jmp {
+                        self.pc = start_pc.add(read_unaligned(self.pc as *const u64) as _);
+                    } else {
+                        self.pc = self.pc.add(size_of::<u64>());
+                    }
+                }
+                Opcode::VmAdd => binary_op!(self, wrapping_add),
+                Opcode::VmSub => binary_op!(self, wrapping_sub),
                 Opcode::Vmctx => {
                     write_unaligned(self.sp.add(1), self as *const _ as u64);
                     self.sp = self.sp.add(1);
@@ -358,9 +412,18 @@ impl Assembler {
         self.emit(Opcode::Cmp);
     }
 
-    pub fn jmp(&mut self, target: u64) {
+    pub fn jmp(&mut self, cond: JmpCond, target: u64) {
         self.emit(Opcode::Jmp);
+        self.emit_byte(cond as u8);
         self.emit_u64(target);
+    }
+
+    pub fn vmadd(&mut self) {
+        self.emit(Opcode::VmAdd);
+    }
+
+    pub fn vmsub(&mut self) {
+        self.emit(Opcode::VmSub);
     }
 
     pub fn vmctx(&mut self) {
@@ -373,6 +436,10 @@ impl Assembler {
 
     fn emit(&mut self, op: Opcode) {
         self.program.push(op as u8);
+    }
+
+    fn emit_byte(&mut self, byte: u8) {
+        self.program.push(byte);
     }
 
     fn emit_u64(&mut self, value: u64) {
@@ -389,17 +456,22 @@ pub fn disassemble(program: &[u8]) -> Result<String> {
         pc = unsafe { pc.add(1) };
 
         s.push_str(format!("{:?}", op).as_str());
-        println!("{:?}", op);
 
         #[allow(clippy::single_match)]
         match op {
-            Opcode::Const | Opcode::Jmp => unsafe {
+            Opcode::Const => unsafe {
                 //let v = *(pc as *const u64);
                 let v = read_unaligned(pc as *const u64);
                 pc = pc.add(size_of::<u64>());
                 s.push_str(format!(" {}", v).as_str());
-                println!("adjusted");
             },
+            Opcode::Jmp => unsafe {
+                let cond = JmpCond::try_from(read_unaligned(pc)).unwrap();
+                pc = pc.add(size_of::<u8>());
+                let val = read_unaligned(pc as *const u64);
+                pc = pc.add(size_of::<u64>());
+                s.push_str(format!(" {:?} {val}", cond).as_str());
+            }
             _ => {}
         }
 

@@ -1,7 +1,6 @@
 use std::collections::HashMap;
-use crate::vm::machine::{Assembler, Register, Machine};
+use crate::vm::machine::{Assembler, Register, Machine, JmpCond};
 use iced_x86::{Decoder, Formatter, Instruction, Mnemonic, NasmFormatter, OpKind};
-use iced_x86::Register::EAX;
 use memoffset::offset_of;
 
 trait Asm {
@@ -16,6 +15,8 @@ trait Asm {
     fn or(&mut self);
     fn xor(&mut self);
     fn cmp(&mut self);
+    fn vmadd(&mut self);
+    fn vmsub(&mut self);
     fn vmctx(&mut self);
     fn vmexit(&mut self);
     fn load_operand(&mut self, inst: &Instruction, operand: u32);
@@ -89,7 +90,7 @@ impl Virtualizer {
 
         for inst in decoder.iter() {
             if jmp_map.contains_key(&inst.ip()) {
-                self.asm.patch(*jmp_map.get(&inst.ip()).unwrap() + 1, self.asm.len() as u64);
+                self.asm.patch(*jmp_map.get(&inst.ip()).unwrap() + 2, self.asm.len() as u64);
                 jmp_map.remove(&inst.ip()).unwrap();
             } else {
                 jmp_map.insert(inst.ip(), self.asm.len());
@@ -115,20 +116,23 @@ impl Virtualizer {
                 Mnemonic::Pop => self.pop(&inst),
                 // todo need to add jne, jb etc now (mostly same as jmp but with rflag checks)
                 // and extensively test jmp to work in real world example
-                Mnemonic::Jmp | Mnemonic::Je | Mnemonic::Jne => {
+                Mnemonic::Jmp | Mnemonic::Je | Mnemonic::Jne | Mnemonic::Jbe
+                | Mnemonic::Ja | Mnemonic::Jle | Mnemonic::Jg => {
                     if !inst.is_jcc_short() && !inst.is_jmp_short() {
                         let mut output = String::new();
                         NasmFormatter::new().format(&inst, &mut output);
                         panic!("unsupported jmp: {}", output);
                     }
 
+                    let condition = JmpCond::from(inst.mnemonic());
+
                     let target = ip + inst.near_branch_target();
-                    println!("target: {}", target);
+
                     if target > inst.ip() {
                         jmp_map.insert(target, self.asm.len());
-                        self.asm.jmp(0);
+                        self.asm.jmp(condition, 0);
                     } else if jmp_map.contains_key(&target) {
-                        self.asm.jmp(*jmp_map.get(&target).unwrap() as _);
+                        self.asm.jmp(condition, *jmp_map.get(&target).unwrap() as _);
                     } else {
                         unresolved_jmps += 1;
                     }
@@ -230,8 +234,8 @@ impl Virtualizer {
 
     fn cmp(&mut self, inst: &Instruction) {
         vmasm!(self,
-            load_operand inst, 1;
             load_operand inst, 0;
+            load_operand inst, 1;
             cmp;
         );
     }
@@ -245,7 +249,7 @@ impl Virtualizer {
             load;
             load_reg RSP;
             const_ 8;
-            add;
+            vmadd;
             store_reg RSP;
             vmexit;
         );
@@ -261,7 +265,7 @@ impl Virtualizer {
         vmasm!(self,
             load_reg RSP;
             const_ 8;
-            sub;
+            vmsub;
             store_reg RSP;
 
             load_operand inst, 0;
@@ -280,7 +284,7 @@ impl Virtualizer {
 
             load_reg RSP;
             const_ 8;
-            add;
+            vmadd;
             store_reg RSP;
         );
     }
@@ -331,6 +335,14 @@ impl Asm for Virtualizer {
         self.asm.cmp();
     }
 
+    fn vmadd(&mut self) {
+        self.asm.vmadd()
+    }
+
+    fn vmsub(&mut self) {
+        self.asm.vmsub()
+    }
+
     fn vmctx(&mut self) {
         self.asm.vmctx();
     }
@@ -376,7 +388,7 @@ impl Asm for Virtualizer {
         self.asm.vmctx();
         self.asm
             .const_(offset_of!(Machine, regs) as u64 + reg_offset);
-        self.asm.add();
+        self.asm.vmadd();
         self.asm.load();
     }
 
@@ -386,7 +398,7 @@ impl Asm for Virtualizer {
         self.asm.vmctx();
         self.asm
             .const_(offset_of!(Machine, regs) as u64 + reg_offset);
-        self.asm.add();
+        self.asm.vmadd();
         self.asm.store();
     }
 
@@ -401,7 +413,7 @@ impl Asm for Virtualizer {
             self.asm.mul();
 
             if inst.memory_base() != iced_x86::Register::None {
-                self.asm.add();
+                self.asm.vmadd();
             }
         }
 
@@ -410,7 +422,7 @@ impl Asm for Virtualizer {
         if inst.memory_base() != iced_x86::Register::None
             || inst.memory_index() != iced_x86::Register::None
         {
-            self.asm.add();
+            self.asm.vmadd();
         }
     }
 }

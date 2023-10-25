@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use obfuscator::vm::machine::Machine;
+    use obfuscator::vm::machine::{disassemble, Machine};
     use obfuscator::vm::virtualizer::virtualize;
 
     #[test]
@@ -21,17 +21,19 @@ mod tests {
         let mut a = CodeAssembler::new(64).unwrap();
         let mut lbl = a.create_label();
 
-        a.mov(rax, rcx).unwrap(); // mov first arg into rax
-        a.jmp(lbl).unwrap(); // jmp to label skipping the add below
-        a.add(rax, 10i32).unwrap(); // add 10 to rax, this should be jmped over
-        a.set_label(&mut lbl).unwrap(); // jmp should land here skipping the add above
-        a.add(rax, 4i32).unwrap(); // add 4 to rax and return, rax should be input + 4
-        a.ret().unwrap();
+        a.mov(rax, rcx).unwrap(); // move first arg into rax
+        a.set_label(&mut lbl).unwrap(); // jmp should land here
+        a.sub(rax, 1).unwrap(); // substract 4 from rax
+        a.cmp(rax, rdx).unwrap();
+        a.jg(lbl).unwrap(); // jmp to label if rax is greater than rdx (loops until rax is rdx)
+        a.ret().unwrap(); // return value of rax, should be zero
 
         let m = Machine::new(&virtualize(&a.assemble(0).unwrap())).unwrap();
 
-        let f: extern "C" fn(i32) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
-        assert_eq!(f(8), 12);
+        let f: extern "C" fn(i32, i32) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        assert_eq!(f(21, 0), 0);
+        // doesnt work when -1 is zero, maybe intended need to verify
+        assert_eq!(f(-2, -1), -3);
     }
 
     #[test]
@@ -46,7 +48,6 @@ mod tests {
         a.ret().unwrap();
 
         let m = Machine::new(&virtualize(&a.assemble(0).unwrap())).unwrap();
-
         let f: extern "C" fn(i32, i32) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
         assert_eq!(f(8, 4), 2);
     }
