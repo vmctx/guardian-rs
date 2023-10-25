@@ -55,7 +55,7 @@ impl From<iced_x86::Mnemonic> for JmpCond {
 }
 
 #[repr(u8)]
-#[derive(num_enum::IntoPrimitive)]
+#[derive(Debug, num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
 pub enum Register {
     Rax,
     Rcx,
@@ -461,16 +461,20 @@ pub fn disassemble(program: &[u8]) -> Result<String> {
         match op {
             Opcode::Const => unsafe {
                 //let v = *(pc as *const u64);
-                let v = read_unaligned(pc as *const u64);
+                let v = read_unaligned(pc as *const usize);
                 pc = pc.add(size_of::<u64>());
-                s.push_str(format!(" {}", v).as_str());
+                if let Ok(reg) = Register::try_from((v - offset_of!(Machine, regs)) as u8 / 8) {
+                    s.push_str(format!(" {:?}", reg).as_str());
+                } else {
+                    s.push_str(format!(" {}", v).as_str());
+                }
             },
             Opcode::Jmp => unsafe {
                 let cond = JmpCond::try_from(read_unaligned(pc)).unwrap();
                 pc = pc.add(size_of::<u8>());
                 let val = read_unaligned(pc as *const u64);
                 pc = pc.add(size_of::<u64>());
-                s.push_str(format!(" {:?} {val}", cond).as_str());
+                s.push_str(format!(" {:?} 0x{:?}", cond, val).as_str());
             }
             _ => {}
         }

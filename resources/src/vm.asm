@@ -92,18 +92,18 @@ vmenter:
 vmexit:
     mov rax, [rcx + {rax}]
     mov rdx, [rcx + {rdx}]
-    // mov rbx, [rcx + 0x28] // non vol but unchanged
-    mov rsp, [rcx + {rsp}] // non vol
-    //mov rbp, [rcx + 0x38] // non vol but unchanged
-    mov rsi, [rcx + {rsi}] // non vol
-    mov rdi, [rcx + {rdi}] // non vol
+    // mov rbx, [rcx + {rbx}] // non vol
+    // mov rsp, [rcx + {rsp}] // non vol
+    // mov rbp, [rcx + {rbp}] // non vol
+    // mov rsi, [rcx + {rsi}] // non vol
+    // mov rdi, [rcx + {rdi}] // non vol
     mov r8,  [rcx + {r8}]
     mov r9,  [rcx + {r9}]
     mov r10, [rcx + {r10}]
     mov r11, [rcx + {r11}]
-    //mov r12, [rcx + 0x70] // non vol but unchanged
-    //mov r13, [rcx + 0x78] // non vol but unchanged
-    //mov r14, [rcx + 0x80] // non vol but unchanged
-    //mov r15, [rcx + 0x88] // non vol but unchanged
+    // mov r12, [rcx + {r12}] // non vol
+    // mov r13, [rcx + {r13}] // non vol
+    // mov r14, [rcx + {r14}] // non vol
+    // mov r15, [rcx + {r15}] // non vol
     mov rcx, [rcx + {rcx}]
     ret

@@ -209,11 +209,13 @@ impl Machine {
                     self.sp = self.sp.add(1);
                 }
                 Opcode::Vmexit => {
-                    drop_in_place(addr_of_mut!((*self).vmstack));
-                    vmexit(self);
+                    break;
                 }
             }
         }
+
+        drop_in_place(addr_of_mut!((*self).vmstack));
+        vmexit(self);
     }
 
     #[inline(always)]
