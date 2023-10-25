@@ -84,57 +84,68 @@ impl Virtualizer {
 
     pub fn virtualize_with_ip(&mut self, ip: u64, program: &[u8]) -> Vec<u8> {
         let mut decoder = Decoder::with_ip(64, program, ip, 0);
+        let mut unresolved_jmps = 0;
         let mut jmp_map = HashMap::<u64, usize>::new();
 
-        for inst in &mut decoder {
+        for inst in decoder.iter() {
             if jmp_map.contains_key(&inst.ip()) {
                 self.asm.patch(*jmp_map.get(&inst.ip()).unwrap() + 1, self.asm.len() as u64);
+                jmp_map.remove(&inst.ip()).unwrap();
             } else {
                 jmp_map.insert(inst.ip(), self.asm.len());
             }
-            self.virtualize_inst(ip, &inst, &mut jmp_map);
+
+            match inst.mnemonic() {
+                Mnemonic::Mov => self.mov(&inst),
+                Mnemonic::Movzx => self.movzx(&inst),
+                Mnemonic::Add => self.add(&inst),
+                Mnemonic::Sub => self.sub(&inst),
+                // todo for now dont support them, see div method below
+                Mnemonic::Div => self.div(&inst),
+                //Mnemonic::Idiv => self.div(inst),
+                // same reason as div
+                //Mnemonic::Mul => self.mul(inst),
+                Mnemonic::Imul => self.mul(&inst),
+                Mnemonic::And => self.and(&inst),
+                Mnemonic::Or => self.or(&inst),
+                Mnemonic::Xor => self.xor(&inst),
+                Mnemonic::Cmp => self.cmp(&inst),
+                Mnemonic::Ret => self.ret(),
+                Mnemonic::Push => self.push(&inst),
+                Mnemonic::Pop => self.pop(&inst),
+                // todo need to add jne, jb etc now (mostly same as jmp but with rflag checks)
+                // and extensively test jmp to work in real world example
+                Mnemonic::Jmp | Mnemonic::Je | Mnemonic::Jne => {
+                    if !inst.is_jcc_short() && !inst.is_jmp_short() {
+                        let mut output = String::new();
+                        NasmFormatter::new().format(&inst, &mut output);
+                        panic!("unsupported jmp: {}", output);
+                    }
+
+                    let target = ip + inst.near_branch_target();
+                    println!("target: {}", target);
+                    if target > inst.ip() {
+                        jmp_map.insert(target, self.asm.len());
+                        self.asm.jmp(0);
+                    } else if jmp_map.contains_key(&target) {
+                        self.asm.jmp(*jmp_map.get(&target).unwrap() as _);
+                    } else {
+                        unresolved_jmps += 1;
+                    }
+                }
+                _ => {
+                    let mut output = String::new();
+                    NasmFormatter::new().format(&inst, &mut output);
+                    panic!("unsupported instruction: {}", output);
+                }
+            }
+        }
+
+        if unresolved_jmps != 0 {
+            panic!("{} unresolved jmps", unresolved_jmps);
         }
 
         self.asm.assemble()
-    }
-
-    fn virtualize_inst(&mut self, start_ip: u64, inst: &Instruction, jmp_map: &mut HashMap<u64, usize>) {
-        match inst.mnemonic() {
-            Mnemonic::Mov => self.mov(inst),
-            Mnemonic::Movzx => self.movzx(inst),
-            Mnemonic::Add => self.add(inst),
-            Mnemonic::Sub => self.sub(inst),
-            // todo for now dont support them, see div method below
-            Mnemonic::Div => self.div(inst),
-            //Mnemonic::Idiv => self.div(inst),
-            // same reason as div
-            //Mnemonic::Mul => self.mul(inst),
-            Mnemonic::Imul => self.mul(inst),
-            Mnemonic::And => self.and(inst),
-            Mnemonic::Or => self.or(inst),
-            Mnemonic::Xor => self.xor(inst),
-            Mnemonic::Cmp => self.cmp(inst),
-            Mnemonic::Ret => self.ret(),
-            Mnemonic::Push => self.push(inst),
-            Mnemonic::Pop => self.pop(inst),
-            // todo need to add jne, jb etc now (mostly same as jmp but with rflag checks)
-            // and extensively test jmp to work in real world example
-            Mnemonic::Jmp => {
-                let target = start_ip + inst.near_branch_target();
-
-                if target > inst.ip() {
-                    jmp_map.insert(target, self.asm.len());
-                    self.asm.jmp(0);
-                } else if jmp_map.contains_key(&target) {
-                    self.asm.jmp(*jmp_map.get(&target).unwrap() as _);
-                }
-            }
-            _ => {
-                let mut output = String::new();
-                NasmFormatter::new().format(inst, &mut output);
-                panic!("unsupported instruction: {}", output);
-            }
-        }
     }
 
     fn mov(&mut self, inst: &Instruction) {
