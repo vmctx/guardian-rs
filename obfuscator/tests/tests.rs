@@ -32,8 +32,8 @@ mod tests {
 
         let f: extern "C" fn(i32, i32) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
         assert_eq!(f(21, 0), 0);
-        // 0 as second argument i think should not work, bcuz -2 is bigger in actual size than 0
-        assert_eq!(f(-2, -1), -3);
+        // todo zero doesnt work cuz it reads us u64
+        assert_eq!(f(-2, 0), -3);
     }
 
     #[test]
