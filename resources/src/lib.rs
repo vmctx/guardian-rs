@@ -170,13 +170,9 @@ impl Machine {
                 Opcode::Or => binary_op_save_flags!(self, bitor),
                 Opcode::Xor => binary_op_save_flags!(self, bitxor),
                 Opcode::Cmp => {
-                    // using asm instead here, because compiler would optimize
-                    // out unused variable
-                    asm!("cmp {}, {}",
-                        in(reg) read_unaligned(self.sp.sub(1)),
-                        in(reg) read_unaligned(self.sp)
-                    );
+                    let result = read_unaligned(self.sp.sub(1)).wrapping_sub(read_unaligned(self.sp));
                     self.set_rflags();
+                    drop(result);
                 },
                 Opcode::Jmp => {
                     let rflags = RFlags::from_bits_truncate(self.rflags);
@@ -186,11 +182,11 @@ impl Machine {
                         JmpCond::Jne => !rflags.contains(RFlags::FLAGS_ZF),
                         JmpCond::Jbe => rflags.contains(RFlags::FLAGS_ZF)
                             || rflags.contains(RFlags::FLAGS_CF),
-                        JmpCond::Ja => !rflags.contains(RFlags::FLAGS_ZF)
-                            || !rflags.contains(RFlags::FLAGS_CF),
+                        JmpCond::Ja => (!rflags.contains(RFlags::FLAGS_ZF)
+                            && !rflags.contains(RFlags::FLAGS_CF)),
                         JmpCond::Jle => rflags.contains(RFlags::FLAGS_SF).bitxor(rflags.contains(RFlags::FLAGS_OF))
                             || rflags.contains(RFlags::FLAGS_ZF),
-                        JmpCond::Jg => !rflags.contains(RFlags::FLAGS_ZF) && (rflags.contains(RFlags::FLAGS_SF) == rflags.contains(RFlags::FLAGS_OF))
+                        JmpCond::Jg => rflags.contains(RFlags::FLAGS_SF) == (rflags.contains(RFlags::FLAGS_OF) && !rflags.contains(RFlags::FLAGS_ZF))
                     };
 
                     self.pc = self.pc.add(1); // jmpcond

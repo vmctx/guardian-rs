@@ -129,14 +129,8 @@ macro_rules! binary_op {
 }
 
 macro_rules! binary_op_save_flags {
-    ($self:ident, $op:literal) => {{
-        let mut result = read_unaligned($self.sp.sub(1));
-
-        // to avoid wrong compilation under debug
-        asm!(concat!($op, " {}, {}"),
-            inout(reg) result,
-            in(reg) read_unaligned($self.sp)
-        );
+    ($self:ident, $op:ident) => {{
+        let result = read_unaligned($self.sp.sub(1)).$op(read_unaligned($self.sp));
 
         $self.set_rflags();
 
@@ -229,10 +223,10 @@ impl Machine {
             (&rax, Register::Rax.into()),
             (&rdx, Register::Rbx.into()),
             // (&rbx, Register::Rbx.into()),
-            (&rsp, Register::Rsp.into()),
+            // (&rsp, Register::Rsp.into()),
             // (&rbp, Register::Rbp.into()),
-            (&rsi, Register::Rsi.into()),
-            (&rdi, Register::Rdi.into()),
+            // (&rsi, Register::Rsi.into()),
+            // (&rdi, Register::Rdi.into()),
             (&r8, Register::R8.into()),
             (&r9, Register::R9.into()),
             (&r10, Register::R10.into()),
@@ -263,14 +257,6 @@ impl Machine {
         Ok(m)
     }
 
-    // save carry and overflow cause why not
-    #[inline(always)]
-    pub fn set_of_cf(&mut self) {
-        let rflags = x86::bits64::rflags::read();
-        self.rflags.set(RFlags::FLAGS_OF, rflags.contains(RFlags::FLAGS_OF));
-        self.rflags.set(RFlags::FLAGS_CF, rflags.contains(RFlags::FLAGS_CF));
-    }
-
     #[inline(always)]
     pub fn set_rflags(&mut self) {
         self.rflags = x86::bits64::rflags::read();
@@ -299,17 +285,15 @@ impl Machine {
                 }
                 Opcode::Div => binary_op!(self, wrapping_div),
                 Opcode::Mul => binary_op!(self, wrapping_mul),
-                Opcode::Add => binary_op_save_flags!(self, "add"),
-                Opcode::Sub => binary_op_save_flags!(self, "sub"),
-                Opcode::And => binary_op_save_flags!(self, "and"),
-                Opcode::Or => binary_op_save_flags!(self, "or"),
-                Opcode::Xor => binary_op_save_flags!(self, "xor"),
+                Opcode::Add => binary_op_save_flags!(self, wrapping_add),
+                Opcode::Sub => binary_op_save_flags!(self, wrapping_sub),
+                Opcode::And => binary_op_save_flags!(self, bitand),
+                Opcode::Or => binary_op_save_flags!(self, bitor),
+                Opcode::Xor => binary_op_save_flags!(self, bitxor),
                 Opcode::Cmp => {
-                    asm!("cmp {}, {}",
-                        in(reg) read_unaligned(self.sp.sub(1)),
-                        in(reg) read_unaligned(self.sp)
-                    );
+                    let result = read_unaligned(self.sp.sub(1)).wrapping_sub(read_unaligned(self.sp));
                     self.set_rflags();
+                    drop(result);
                 }
                 Opcode::Jmp => {
                     let do_jmp = match JmpCond::try_from(*self.pc).unwrap() {
@@ -318,11 +302,11 @@ impl Machine {
                         JmpCond::Jne => !self.rflags.contains(RFlags::FLAGS_ZF),
                         JmpCond::Jbe => self.rflags.contains(RFlags::FLAGS_ZF)
                             || self.rflags.contains(RFlags::FLAGS_CF),
-                        JmpCond::Ja => !self.rflags.contains(RFlags::FLAGS_ZF)
-                            || !self.rflags.contains(RFlags::FLAGS_CF),
+                        JmpCond::Ja => (!self.rflags.contains(RFlags::FLAGS_ZF)
+                            && !self.rflags.contains(RFlags::FLAGS_CF)),
                         JmpCond::Jle => self.rflags.contains(RFlags::FLAGS_SF).bitxor(self.rflags.contains(RFlags::FLAGS_OF))
                             || self.rflags.contains(RFlags::FLAGS_ZF),
-                        JmpCond::Jg => !self.rflags.contains(RFlags::FLAGS_ZF) && (self.rflags.contains(RFlags::FLAGS_SF) == self.rflags.contains(RFlags::FLAGS_OF))
+                        JmpCond::Jg => self.rflags.contains(RFlags::FLAGS_SF) == self.rflags.contains(RFlags::FLAGS_OF) && !self.rflags.contains(RFlags::FLAGS_ZF)
                     };
 
                     self.pc = self.pc.add(1); // jmpcond
@@ -340,12 +324,14 @@ impl Machine {
                     self.sp = self.sp.add(1);
                 }
                 Opcode::Vmexit => {
-                    let vmexit: extern "C" fn(&mut Machine) =
-                        std::mem::transmute(self.vmexit.as_ptr::<()>());
-                    vmexit(self);
+                    break;
                 }
             }
         }
+
+        let vmexit: extern "C" fn(&mut Machine) =
+            std::mem::transmute(self.vmexit.as_ptr::<()>());
+        vmexit(self);
     }
 }
 
@@ -463,7 +449,7 @@ pub fn disassemble(program: &[u8]) -> Result<String> {
                 //let v = *(pc as *const u64);
                 let v = read_unaligned(pc as *const usize);
                 pc = pc.add(size_of::<u64>());
-                if let Ok(reg) = Register::try_from((v - offset_of!(Machine, regs)) as u8 / 8) {
+                if let Ok(reg) = Register::try_from((v.wrapping_sub(offset_of!(Machine, regs))) as u8 / 8) {
                     s.push_str(format!(" {:?}", reg).as_str());
                 } else {
                     s.push_str(format!(" {}", v).as_str());

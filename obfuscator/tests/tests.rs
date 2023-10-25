@@ -32,7 +32,7 @@ mod tests {
 
         let f: extern "C" fn(i32, i32) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
         assert_eq!(f(21, 0), 0);
-        // doesnt work when -1 is zero, maybe intended need to verify
+        // 0 as second argument i think should not work, bcuz -2 is bigger in actual size than 0
         assert_eq!(f(-2, -1), -3);
     }
 
