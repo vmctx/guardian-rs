@@ -283,7 +283,6 @@ impl Machine {
                     write_unaligned(*self.sp as *mut u64, read_unaligned(self.sp.sub(1)));
                     self.sp = self.sp.sub(2);
                 }
-                // todo binary ops dont work if i dont have the type of the value
                 Opcode::Div => binary_op!(self, wrapping_div),
                 Opcode::Mul => binary_op!(self, wrapping_mul),
                 Opcode::Add => binary_op_save_flags!(self, wrapping_add),

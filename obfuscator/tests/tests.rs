@@ -30,9 +30,9 @@ mod tests {
 
         let m = Machine::new(&virtualize(&a.assemble(0).unwrap())).unwrap();
 
-        let f: extern "C" fn(i32, i32) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        // figure out why cmp i32, i32 doesnt set SF (not vm issue)
+        let f: extern "C" fn(i64, i64) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
         assert_eq!(f(21, 0), 0);
-        // todo zero doesnt work cuz it reads us u64
         assert_eq!(f(-2, 0), -3);
     }
 
