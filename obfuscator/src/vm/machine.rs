@@ -20,6 +20,7 @@ pub enum Opcode {
     Or,
     Xor,
     Cmp,
+    Jmp,
     Vmctx,
     Vmexit,
 }
@@ -245,6 +246,7 @@ impl Machine {
     #[allow(clippy::missing_safety_doc)]
     pub unsafe extern "C" fn run(&mut self) {
         self.pc = self.program.as_ptr();
+        let start_pc = self.pc;
         self.sp = self.vmstack.as_mut_ptr();
 
         while self.pc < self.program.as_ptr_range().end {
@@ -275,7 +277,10 @@ impl Machine {
                         in(reg) read_unaligned(self.sp)
                     );
                     self.set_rflags();
-                }
+                },
+                Opcode::Jmp => {
+                    self.pc = start_pc.add(read_unaligned(self.pc as *const u64) as _);
+                },
                 Opcode::Vmctx => {
                     write_unaligned(self.sp.add(1), self as *const _ as u64);
                     self.sp = self.sp.add(1);
@@ -298,6 +303,14 @@ pub struct Assembler {
 impl Assembler {
     pub fn assemble(&self) -> Vec<u8> {
         self.program.clone()
+    }
+
+    pub fn len(&self) -> usize {
+        self.program.len()
+    }
+
+    pub fn patch(&mut self, index: usize, value: u64) {
+        self.program[index..][..8].copy_from_slice(&value.to_le_bytes());
     }
 
     pub fn const_(&mut self, v: u64) {
@@ -345,6 +358,11 @@ impl Assembler {
         self.emit(Opcode::Cmp);
     }
 
+    pub fn jmp(&mut self, target: u64) {
+        self.emit(Opcode::Jmp);
+        self.emit_u64(target);
+    }
+
     pub fn vmctx(&mut self) {
         self.emit(Opcode::Vmctx);
     }
@@ -371,14 +389,16 @@ pub fn disassemble(program: &[u8]) -> Result<String> {
         pc = unsafe { pc.add(1) };
 
         s.push_str(format!("{:?}", op).as_str());
+        println!("{:?}", op);
 
         #[allow(clippy::single_match)]
         match op {
-            Opcode::Const => unsafe {
+            Opcode::Const | Opcode::Jmp => unsafe {
                 //let v = *(pc as *const u64);
                 let v = read_unaligned(pc as *const u64);
                 pc = pc.add(size_of::<u64>());
                 s.push_str(format!(" {}", v).as_str());
+                println!("adjusted");
             },
             _ => {}
         }

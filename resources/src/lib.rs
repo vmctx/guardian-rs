@@ -47,6 +47,7 @@ pub enum Opcode {
     Or,
     Xor,
     Cmp,
+    Jmp,
     Vmctx,
     Vmexit,
 }
@@ -164,6 +165,9 @@ impl Machine {
                     in(reg) read_unaligned(self.sp)
                     );
                     self.set_rflags();
+                },
+                Opcode::Jmp => {
+                    self.pc = program.add(read_unaligned(self.pc as *const u64) as _);
                 }
                 Opcode::Vmctx => {
                     // pushes self ptr on the stack
