@@ -179,17 +179,18 @@ impl Machine {
                     self.set_rflags();
                 },
                 Opcode::Jmp => {
+                    let rflags = RFlags::from_bits_truncate(self.rflags);
                     let do_jmp = match JmpCond::try_from(*self.pc).unwrap() {
                         JmpCond::Jmp => true,
-                        JmpCond::Je => self.rflags.contains(RFlags::FLAGS_ZF),
-                        JmpCond::Jne => !self.rflags.contains(RFlags::FLAGS_ZF),
-                        JmpCond::Jbe => self.rflags.contains(RFlags::FLAGS_ZF)
-                            || self.rflags.contains(RFlags::FLAGS_CF),
-                        JmpCond::Ja => !self.rflags.contains(RFlags::FLAGS_ZF)
-                            || !self.rflags.contains(RFlags::FLAGS_CF),
-                        JmpCond::Jle => self.rflags.contains(RFlags::FLAGS_SF).bitxor(self.rflags.contains(RFlags::FLAGS_OF))
-                            || self.rflags.contains(RFlags::FLAGS_ZF),
-                        JmpCond::Jg => !self.rflags.contains(RFlags::FLAGS_ZF) && (self.rflags.contains(RFlags::FLAGS_SF) == self.rflags.contains(RFlags::FLAGS_OF))
+                        JmpCond::Je => rflags.contains(RFlags::FLAGS_ZF),
+                        JmpCond::Jne => !rflags.contains(RFlags::FLAGS_ZF),
+                        JmpCond::Jbe => rflags.contains(RFlags::FLAGS_ZF)
+                            || rflags.contains(RFlags::FLAGS_CF),
+                        JmpCond::Ja => !rflags.contains(RFlags::FLAGS_ZF)
+                            || !rflags.contains(RFlags::FLAGS_CF),
+                        JmpCond::Jle => rflags.contains(RFlags::FLAGS_SF).bitxor(rflags.contains(RFlags::FLAGS_OF))
+                            || rflags.contains(RFlags::FLAGS_ZF),
+                        JmpCond::Jg => !rflags.contains(RFlags::FLAGS_ZF) && (rflags.contains(RFlags::FLAGS_SF) == rflags.contains(RFlags::FLAGS_OF))
                     };
 
                     self.pc = self.pc.add(1); // jmpcond
