@@ -57,12 +57,11 @@ mod tests {
         a.shr(r8, 1).unwrap();
         a.add(eax, ecx).unwrap();
         a.add(eax, r8d).unwrap();
-        a.set_label(&mut lbl).unwrap(); // jmp should land here
-        a.ret().unwrap(); // return value of rax, should be zero
+        a.set_label(&mut lbl).unwrap();
+        a.ret().unwrap();
 
         let m = Machine::new(&virtualize(&a.assemble(0).unwrap())).unwrap();
 
-        // todo figure out why i32, i32 sets SF even tho its positive result
         let f: extern "C" fn(i32, i32) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
         let (a, b) = (-7, 5);
         let result = f(a, b);

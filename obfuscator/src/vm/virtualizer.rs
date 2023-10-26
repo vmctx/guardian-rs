@@ -31,6 +31,33 @@ trait Asm {
     fn lea_operand(&mut self, inst: &Instruction);
 }
 
+#[repr(u8)]
+#[derive(Debug, num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
+enum OperandSize {
+    Byte,
+    Word,
+    Dword,
+    Qword
+}
+
+impl From<iced_x86::Register> for OperandSize {
+    fn from(reg: iced_x86::Register) -> Self {
+       if !reg.is_gpr() {
+           panic!("unsupported register");
+       }
+
+        if reg.is_gpr8() {
+            OperandSize::Byte
+        } else if reg.is_gpr16() {
+            OperandSize::Word
+        } else if reg.is_gpr32() {
+            OperandSize::Dword
+        } else {
+            OperandSize::Qword
+        }
+    }
+}
+
 /// A fun little macro that makes writing VM assembly more familiar. For example, instead of:
 /// ```
 /// self.asm.const_(2);
@@ -178,20 +205,24 @@ impl Virtualizer {
     }
 
     // todo
+    // https://blog.back.engineering/17/05/2021/#ADD
     fn add(&mut self, inst: &Instruction) {
-        if inst.op0_register().is_gpr32() {
-            binary_op!(self, inst, addd);
-        } else {
-            binary_op!(self, inst, add);
+        match OperandSize::try_from(inst.op0_register()).unwrap() {
+            OperandSize::Byte => panic!("unsupported operand size"),
+            OperandSize::Word => panic!("unsupported operand size"),
+            OperandSize::Dword => binary_op!(self, inst, addd),
+            OperandSize::Qword => binary_op!(self, inst, add)
         }
     }
 
-    // todo
+    // todo implement all of this for push and load too, probably
+    // https://blog.back.engineering/17/05/2021/#PUSHVSP
     fn sub(&mut self, inst: &Instruction) {
-        if inst.op0_register().is_gpr32() {
-            binary_op!(self, inst, subd);
-        } else {
-            binary_op!(self, inst, sub);
+        match OperandSize::try_from(inst.op0_register()).unwrap() {
+            OperandSize::Byte => panic!("unsupported operand size"),
+            OperandSize::Word => panic!("unsupported operand size"),
+            OperandSize::Dword => binary_op!(self, inst, subd),
+            OperandSize::Qword => binary_op!(self, inst, sub)
         }
     }
 
@@ -242,14 +273,15 @@ impl Virtualizer {
         // opkind has to be memory or register
         assert_eq!(inst.op0_kind(), OpKind::Register);
         assert_eq!(inst.op1_kind(), OpKind::Immediate8);
-        assert_eq!(inst.immediate8(), 1);
 
-        vmasm!(self,
-            load_operand inst, 0;
-            const_ 2;
-            div;
-            store_operand inst, 0;
-        );
+        for _ in 0..inst.immediate8() {
+            vmasm!(self,
+                load_operand inst, 0;
+                const_ 2;
+                div;
+                store_operand inst, 0;
+            );
+        }
     }
 
     fn mul(&mut self, inst: &Instruction) {
