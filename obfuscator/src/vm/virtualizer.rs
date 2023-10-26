@@ -8,7 +8,11 @@ trait Asm {
     fn load(&mut self);
     fn store(&mut self);
     fn add(&mut self);
+    // 32 bit add
+    fn addd(&mut self);
     fn sub(&mut self);
+    // 32 bit sub
+    fn subd(&mut self);
     fn div(&mut self);
     fn mul(&mut self);
     fn and(&mut self);
@@ -173,12 +177,22 @@ impl Virtualizer {
         );
     }
 
+    // todo
     fn add(&mut self, inst: &Instruction) {
-        binary_op!(self, inst, add);
+        if inst.op0_register().is_gpr32() {
+            binary_op!(self, inst, addd);
+        } else {
+            binary_op!(self, inst, add);
+        }
     }
 
+    // todo
     fn sub(&mut self, inst: &Instruction) {
-        binary_op!(self, inst, sub);
+        if inst.op0_register().is_gpr32() {
+            binary_op!(self, inst, subd);
+        } else {
+            binary_op!(self, inst, sub);
+        }
     }
 
     // todo store remainder, use correct regs
@@ -345,8 +359,16 @@ impl Asm for Virtualizer {
         self.asm.add();
     }
 
+    fn addd(&mut self) {
+        self.asm.addd();
+    }
+
     fn sub(&mut self) {
         self.asm.sub();
+    }
+
+    fn subd(&mut self) {
+        self.asm.subd();
     }
 
     fn div(&mut self) {

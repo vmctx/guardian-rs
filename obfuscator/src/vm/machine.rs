@@ -1,4 +1,3 @@
-use std::arch::asm;
 use anyhow::Result;
 use std::mem::size_of;
 use std::ops::{BitAnd, BitOr, BitXor, Not};
@@ -13,7 +12,9 @@ pub enum Opcode {
     Load,
     Store,
     Add,
+    AddD,
     Sub,
+    SubD,
     Div,
     Mul,
     And,
@@ -130,14 +131,14 @@ macro_rules! binary_op {
 }
 
 macro_rules! binary_op_save_flags {
-    ($self:ident, $op:ident) => {{
-        let result = read_unaligned($self.sp.sub(1)).$op(read_unaligned($self.sp));
+    ($self:ident, $bit:ident, $op:ident) => {{
+        let result = read_unaligned($self.sp.sub(1) as *const $bit).$op(read_unaligned($self.sp as *const $bit));
 
         $self.set_rflags();
 
         write_unaligned(
             $self.sp.sub(1),
-            result,
+            result as _,
         );
 
         $self.sp = $self.sp.sub(1);
@@ -299,14 +300,28 @@ impl Machine {
                     write_unaligned(*self.sp as *mut u64, read_unaligned(self.sp.sub(1)));
                     self.sp = self.sp.sub(2);
                 }
-                // todo sign extend or something
-                Opcode::Div => binary_op_save_flags!(self, wrapping_div), // unfinished
-                Opcode::Mul => binary_op_save_flags!(self, wrapping_mul),
-                Opcode::Add => binary_op_save_flags!(self, wrapping_add),
-                Opcode::Sub => binary_op_save_flags!(self, wrapping_sub),
-                Opcode::And => binary_op_save_flags!(self, bitand),
-                Opcode::Or => binary_op_save_flags!(self, bitor),
-                Opcode::Xor => binary_op_save_flags!(self, bitxor),
+                // todo expand on this
+                // one solution is to have diff size opcodes
+                /*
+                opcode Add = 32bit
+                opcode AddQ = 64bit
+                opcode AddW = 16bit
+                opcode AddB = 8 bit
+
+                opcode add:
+                    let = stack-1.wrapping_add(read(stack as *const i32/u32))
+                opcode addq:
+                    let = stack-1.wrapping_add(read(stack))
+                 */
+                Opcode::Div => binary_op_save_flags!(self, u64, wrapping_div), // unfinished
+                Opcode::Mul => binary_op_save_flags!(self, u64, wrapping_mul),
+                Opcode::Add => binary_op_save_flags!(self, u64, wrapping_add),
+                Opcode::AddD => binary_op_save_flags!(self, u32, wrapping_add),
+                Opcode::Sub => binary_op_save_flags!(self, u64, wrapping_sub),
+                Opcode::SubD => binary_op_save_flags!(self, u32, wrapping_sub),
+                Opcode::And => binary_op_save_flags!(self, u64, bitand),
+                Opcode::Or => binary_op_save_flags!(self, u64, bitor),
+                Opcode::Xor => binary_op_save_flags!(self, u64, bitxor),
                 Opcode::Not => binary_op_arg1_save_flags!(self, not),
                 Opcode::Cmp => {
                     let result = read_unaligned(self.sp.sub(1)).wrapping_sub(read_unaligned(self.sp));
@@ -388,8 +403,16 @@ impl Assembler {
         self.emit(Opcode::Add);
     }
 
+    pub fn addd(&mut self) {
+        self.emit(Opcode::AddD);
+    }
+
     pub fn sub(&mut self) {
         self.emit(Opcode::Sub);
+    }
+
+    pub fn subd(&mut self) {
+        self.emit(Opcode::SubD);
     }
 
     pub fn div(&mut self) {

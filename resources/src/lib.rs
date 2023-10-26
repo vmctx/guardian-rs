@@ -39,7 +39,9 @@ pub enum Opcode {
     Load,
     Store,
     Add,
+    AddD,
     Sub,
+    SubD,
     Div,
     Mul,
     And,
@@ -101,19 +103,20 @@ macro_rules! binary_op {
 }
 
 macro_rules! binary_op_save_flags {
-    ($self:ident, $op:ident) => {{
-        let result = read_unaligned($self.sp.sub(1)).$op(read_unaligned($self.sp));
+    ($self:ident, $bit:ident, $op:ident) => {{
+        let result = read_unaligned($self.sp.sub(1) as *const $bit).$op(read_unaligned($self.sp as *const $bit));
 
         $self.set_rflags();
 
         write_unaligned(
             $self.sp.sub(1),
-            result,
+            result as _,
         );
 
         $self.sp = $self.sp.sub(1);
     }}
 }
+
 
 macro_rules! binary_op_arg1_save_flags {
     ($self:ident, $op:ident) => {{
@@ -176,14 +179,15 @@ impl Machine {
                     write_unaligned(*self.sp as *mut u64, read_unaligned(self.sp.sub(1)));
                     self.sp = self.sp.sub(2);
                 }
-                Opcode::Div => binary_op!(self, wrapping_div),
-                // imul
-                Opcode::Mul => binary_op!(self, wrapping_mul),
-                Opcode::Add => binary_op_save_flags!(self, wrapping_add),
-                Opcode::Sub => binary_op_save_flags!(self, wrapping_sub),
-                Opcode::And => binary_op_save_flags!(self, bitand),
-                Opcode::Or => binary_op_save_flags!(self, bitor),
-                Opcode::Xor => binary_op_save_flags!(self, bitxor),
+                Opcode::Div => binary_op_save_flags!(self, u64, wrapping_div), // unfinished
+                Opcode::Mul => binary_op_save_flags!(self, u64, wrapping_mul),
+                Opcode::Add => binary_op_save_flags!(self, u64, wrapping_add),
+                Opcode::AddD => binary_op_save_flags!(self, u32, wrapping_add),
+                Opcode::Sub => binary_op_save_flags!(self, u64, wrapping_sub),
+                Opcode::SubD => binary_op_save_flags!(self, u32, wrapping_sub),
+                Opcode::And => binary_op_save_flags!(self, u64, bitand),
+                Opcode::Or => binary_op_save_flags!(self, u64, bitor),
+                Opcode::Xor => binary_op_save_flags!(self, u64, bitxor),
                 Opcode::Not => binary_op_arg1_save_flags!(self, not),
                 Opcode::Cmp => {
                     let result = read_unaligned(self.sp.sub(1)).wrapping_sub(read_unaligned(self.sp));

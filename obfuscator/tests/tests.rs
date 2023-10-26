@@ -63,7 +63,7 @@ mod tests {
         let m = Machine::new(&virtualize(&a.assemble(0).unwrap())).unwrap();
 
         // todo figure out why i32, i32 sets SF even tho its positive result
-        let f: extern "C" fn(i64, i64) -> i64 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        let f: extern "C" fn(i32, i32) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
         let (a, b) = (-7, 5);
         let result = f(a, b);
         assert_eq!(result, -18);
