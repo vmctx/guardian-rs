@@ -6,10 +6,9 @@ extern crate alloc;
 
 use alloc::vec;
 use alloc::vec::Vec;
-use core::arch::asm;
 use core::convert::TryFrom;
 use core::mem::size_of;
-use core::ops::{BitAnd, BitOr, BitXor};
+use core::ops::{BitAnd, BitOr, BitXor, Not};
 use core::ptr::{addr_of_mut, drop_in_place, read_unaligned, write_unaligned};
 
 use x86::bits64::rflags::RFlags;
@@ -46,6 +45,7 @@ pub enum Opcode {
     And,
     Or,
     Xor,
+    Not,
     Cmp,
     Jmp,
     Vmctx,
@@ -115,6 +115,21 @@ macro_rules! binary_op_save_flags {
     }}
 }
 
+macro_rules! binary_op_arg1_save_flags {
+    ($self:ident, $op:ident) => {{
+        let result = read_unaligned($self.sp).$op();
+
+        $self.set_rflags();
+
+        write_unaligned(
+            $self.sp.sub(1),
+            result,
+        );
+
+        $self.sp = $self.sp.sub(1);
+    }}
+}
+
 #[repr(C)]
 pub struct Machine {
     pub(crate) pc: *const u8,
@@ -169,6 +184,7 @@ impl Machine {
                 Opcode::And => binary_op_save_flags!(self, bitand),
                 Opcode::Or => binary_op_save_flags!(self, bitor),
                 Opcode::Xor => binary_op_save_flags!(self, bitxor),
+                Opcode::Not => binary_op_arg1_save_flags!(self, not),
                 Opcode::Cmp => {
                     let result = read_unaligned(self.sp.sub(1)).wrapping_sub(read_unaligned(self.sp));
                     self.set_rflags();

@@ -38,6 +38,41 @@ mod tests {
 
     #[test]
     #[cfg(target_env = "msvc")]
+    fn virtualize_calc_lbl() {
+        use iced_x86::code_asm::*;
+        let mut a = CodeAssembler::new(64).unwrap();
+        let mut lbl = a.create_label();
+
+        a.xor(eax, eax).unwrap();
+        a.mov(r8d, edx).unwrap();
+        a.sub(r8d, ecx).unwrap();
+        a.jle(lbl).unwrap();
+        a.mov(r9d, ecx).unwrap();
+        a.not(r9d).unwrap();
+        a.add(r9d, edx).unwrap();
+        a.lea(eax, qword_ptr(rcx + 1)).unwrap();
+        a.imul_2(eax, r9d).unwrap();
+        a.add(r8d, 0x0FFFFFFFEu32 as i32).unwrap();
+        a.imul_2(r8, r9).unwrap();
+        a.shr(r8, 1).unwrap();
+        a.add(eax, ecx).unwrap();
+        a.add(eax, r8d).unwrap();
+        a.set_label(&mut lbl).unwrap(); // jmp should land here
+        a.ret().unwrap(); // return value of rax, should be zero
+
+        let m = Machine::new(&virtualize(&a.assemble(0).unwrap())).unwrap();
+
+        // todo figure out why i32, i32 sets SF even tho its positive result
+        let f: extern "C" fn(i64, i64) -> i64 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        let (a, b) = (-7, 5);
+        let result = f(a, b);
+        assert_eq!(result, -18);
+        let result = f(result, b - result);
+        assert_eq!(result, 82);
+    }
+
+    #[test]
+    #[cfg(target_env = "msvc")]
     fn virtualize_div() {
         use iced_x86::code_asm::*;
         let mut a = CodeAssembler::new(64).unwrap();

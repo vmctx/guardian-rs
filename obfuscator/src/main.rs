@@ -6,6 +6,7 @@ use symbolic_demangle::Demangle;
 
 use crate::diassembler::Disassembler;
 use crate::pe::parser::MapFile;
+use crate::vm::machine::disassemble;
 use crate::vm::virtualizer::{virtualize, virtualize_with_ip};
 
 mod diassembler;
@@ -98,10 +99,12 @@ fn virtualize_functions(pefile: &VecPE, map_file: MapFile, functions: &[&str]) -
         let function_size = Disassembler::from_bytes(target_function.to_vec()).disassemble();
         // get again but with "real" (hopefully) size
         let target_function = pefile.get_slice_ref::<u8>(target_fn_addr, function_size).unwrap();
+        println!("{:x}", pefile.get_image_base().unwrap() + function.rva.0 as u64);
         let mut virtualized_function = virtualize_with_ip(
             pefile.get_image_base().unwrap() + function.rva.0 as u64,
             target_function
         );
+        println!("{}", disassemble(&virtualized_function).unwrap());
         virtualized_fns.push(VirtualizedFn {
             rva: function.rva.0,
             size: function_size,

@@ -1,6 +1,4 @@
 use iced_x86::FlowControl;
-use crate::virtualize;
-use crate::vm::machine::disassemble;
 
 pub struct Disassembler {
     bytes: Vec<u8>,

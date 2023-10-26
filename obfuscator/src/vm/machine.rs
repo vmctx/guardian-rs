@@ -1,7 +1,7 @@
 use std::arch::asm;
 use anyhow::Result;
 use std::mem::size_of;
-use std::ops::{BitAnd, BitOr, BitXor};
+use std::ops::{BitAnd, BitOr, BitXor, Not};
 use std::ptr::{read_unaligned, write_unaligned};
 use memoffset::offset_of;
 use x86::bits64::rflags::RFlags;
@@ -19,6 +19,7 @@ pub enum Opcode {
     And,
     Or,
     Xor,
+    Not,
     Cmp,
     Jmp,
     Vmctx,
@@ -131,6 +132,21 @@ macro_rules! binary_op {
 macro_rules! binary_op_save_flags {
     ($self:ident, $op:ident) => {{
         let result = read_unaligned($self.sp.sub(1)).$op(read_unaligned($self.sp));
+
+        $self.set_rflags();
+
+        write_unaligned(
+            $self.sp.sub(1),
+            result,
+        );
+
+        $self.sp = $self.sp.sub(1);
+    }}
+}
+
+macro_rules! binary_op_arg1_save_flags {
+    ($self:ident, $op:ident) => {{
+        let result = read_unaligned($self.sp).$op();
 
         $self.set_rflags();
 
@@ -283,13 +299,15 @@ impl Machine {
                     write_unaligned(*self.sp as *mut u64, read_unaligned(self.sp.sub(1)));
                     self.sp = self.sp.sub(2);
                 }
-                Opcode::Div => binary_op!(self, wrapping_div),
-                Opcode::Mul => binary_op!(self, wrapping_mul),
+                // todo sign extend or something
+                Opcode::Div => binary_op_save_flags!(self, wrapping_div), // unfinished
+                Opcode::Mul => binary_op_save_flags!(self, wrapping_mul),
                 Opcode::Add => binary_op_save_flags!(self, wrapping_add),
                 Opcode::Sub => binary_op_save_flags!(self, wrapping_sub),
                 Opcode::And => binary_op_save_flags!(self, bitand),
                 Opcode::Or => binary_op_save_flags!(self, bitor),
                 Opcode::Xor => binary_op_save_flags!(self, bitxor),
+                Opcode::Not => binary_op_arg1_save_flags!(self, not),
                 Opcode::Cmp => {
                     let result = read_unaligned(self.sp.sub(1)).wrapping_sub(read_unaligned(self.sp));
                     self.set_rflags();
@@ -304,7 +322,7 @@ impl Machine {
                             || self.rflags.contains(RFlags::FLAGS_CF),
                         JmpCond::Ja => (!self.rflags.contains(RFlags::FLAGS_ZF)
                             && !self.rflags.contains(RFlags::FLAGS_CF)),
-                        JmpCond::Jle => self.rflags.contains(RFlags::FLAGS_SF).bitxor(self.rflags.contains(RFlags::FLAGS_OF))
+                        JmpCond::Jle => self.rflags.contains(RFlags::FLAGS_SF) ^ self.rflags.contains(RFlags::FLAGS_OF)
                             || self.rflags.contains(RFlags::FLAGS_ZF),
                         JmpCond::Jg => self.rflags.contains(RFlags::FLAGS_SF) == self.rflags.contains(RFlags::FLAGS_OF) && !self.rflags.contains(RFlags::FLAGS_ZF)
                     };
@@ -394,6 +412,10 @@ impl Assembler {
         self.emit(Opcode::Xor);
     }
 
+    pub fn not(&mut self) {
+        self.emit(Opcode::Not);
+    }
+
     pub fn cmp(&mut self) {
         self.emit(Opcode::Cmp);
     }
@@ -436,12 +458,13 @@ impl Assembler {
 pub fn disassemble(program: &[u8]) -> Result<String> {
     let mut s = String::new();
     let mut pc = program.as_ptr();
+    let mut index = 0;
 
     while pc < program.as_ptr_range().end {
         let op = Opcode::try_from(unsafe { *pc })?;
         pc = unsafe { pc.add(1) };
 
-        s.push_str(format!("{:?}", op).as_str());
+        s.push_str(format!("{:x}: {:?}", pc.wrapping_sub(program.as_ptr() as usize) as usize - 1, op).as_str());
 
         #[allow(clippy::single_match)]
         match op {
@@ -466,6 +489,7 @@ pub fn disassemble(program: &[u8]) -> Result<String> {
         }
 
         s.push('\n');
+        index += 1;
     }
 
     Ok(s)

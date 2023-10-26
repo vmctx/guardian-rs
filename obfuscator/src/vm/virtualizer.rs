@@ -14,6 +14,7 @@ trait Asm {
     fn and(&mut self);
     fn or(&mut self);
     fn xor(&mut self);
+    fn not(&mut self);
     fn cmp(&mut self);
     fn vmadd(&mut self);
     fn vmsub(&mut self);
@@ -92,6 +93,7 @@ impl Virtualizer {
             if jmp_map.contains_key(&inst.ip()) {
                 self.asm.patch(*jmp_map.get(&inst.ip()).unwrap() + 2, self.asm.len() as u64);
                 jmp_map.remove(&inst.ip()).unwrap();
+                unresolved_jmps -= 1;
             } else {
                 jmp_map.insert(inst.ip(), self.asm.len());
             }
@@ -105,12 +107,15 @@ impl Virtualizer {
                 Mnemonic::Div => self.div(&inst),
                 //Mnemonic::Idiv => self.div(inst),
                 // same reason as div
+                Mnemonic::Shr => self.shr(&inst),
                 //Mnemonic::Mul => self.mul(inst),
                 Mnemonic::Imul => self.mul(&inst),
                 Mnemonic::And => self.and(&inst),
                 Mnemonic::Or => self.or(&inst),
                 Mnemonic::Xor => self.xor(&inst),
+                Mnemonic::Not => self.not(&inst),
                 Mnemonic::Cmp => self.cmp(&inst),
+                Mnemonic::Lea => self.lea(&inst),
                 Mnemonic::Ret => self.ret(),
                 Mnemonic::Push => self.push(&inst),
                 Mnemonic::Pop => self.pop(&inst),
@@ -126,11 +131,12 @@ impl Virtualizer {
 
                     let condition = JmpCond::from(inst.mnemonic());
 
-                    let target = ip + inst.near_branch_target();
+                    let target = inst.near_branch_target();
 
                     if target > inst.ip() {
                         jmp_map.insert(target, self.asm.len());
                         self.asm.jmp(condition, 0);
+                        unresolved_jmps += 1;
                     } else if jmp_map.contains_key(&target) {
                         self.asm.jmp(condition, *jmp_map.get(&target).unwrap() as _);
                     } else {
@@ -216,6 +222,22 @@ impl Virtualizer {
         );
     }
 
+    // todo untested
+    // divide op0 by 2 for op1 times
+    fn shr(&mut self, inst: &Instruction) {
+        // opkind has to be memory or register
+        assert_eq!(inst.op0_kind(), OpKind::Register);
+        assert_eq!(inst.op1_kind(), OpKind::Immediate8);
+        assert_eq!(inst.immediate8(), 1);
+
+        vmasm!(self,
+            load_operand inst, 0;
+            const_ 2;
+            div;
+            store_operand inst, 0;
+        );
+    }
+
     fn mul(&mut self, inst: &Instruction) {
         binary_op!(self, inst, mul);
     }
@@ -232,11 +254,27 @@ impl Virtualizer {
         binary_op!(self, inst, xor);
     }
 
+    fn not(&mut self, inst: &Instruction) {
+        vmasm!(self,
+            load_operand inst, 0;
+            not;
+            store_operand inst, 0;
+        );
+    }
+
     fn cmp(&mut self, inst: &Instruction) {
         vmasm!(self,
             load_operand inst, 0;
             load_operand inst, 1;
             cmp;
+        );
+    }
+
+    // seems to be correct
+    fn lea(&mut self, inst: &Instruction) {
+        vmasm!(self,
+            lea_operand inst;
+            store_operand inst, 0;
         );
     }
 
@@ -331,6 +369,10 @@ impl Asm for Virtualizer {
         self.asm.xor();
     }
 
+    fn not(&mut self) {
+        self.asm.not();
+    }
+
     fn cmp(&mut self) {
         self.asm.cmp();
     }
@@ -361,6 +403,9 @@ impl Asm for Virtualizer {
             // todo maybe use traits to restrict opkinds on some functions
             // like div which can only have register and memory
             // sub can have immediates as example
+            OpKind::Immediate8to32 => {
+                self.const_(inst.immediate8to32() as u64)
+            }
             OpKind::Immediate8to64 => {
                 self.const_(inst.immediate8to64() as u64)
             }
