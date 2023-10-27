@@ -189,7 +189,8 @@ impl Machine {
     #[no_mangle]
     pub unsafe extern "C" fn run(&mut self, program: *const u8) {
         self.pc = program;
-        self.sp = self.vmstack.as_mut_ptr();
+        self.sp = self.vmstack.as_mut_ptr()
+            .add((self.vmstack.len() - 0x100 - size_of::<u64>()) / size_of::<*mut u64>());
 
        loop {
             let op = Opcode::try_from(*self.pc).unwrap();
