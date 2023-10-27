@@ -95,7 +95,7 @@ mod tests {
         a.pop(rax).unwrap();
         a.ret().unwrap();
         let m = Machine::new(&virtualize(&a.assemble(0).unwrap())).unwrap();
-        let f: extern "C" fn(i32) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
-        assert_eq!(f(8), 8);
+        let f: extern "C" fn(i8) -> i8 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        assert_eq!(f(-8), -8);
     }
 }

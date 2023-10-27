@@ -9,19 +9,29 @@ use x86::bits64::rflags::RFlags;
 #[derive(Debug, num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
 pub enum Opcode {
     Const,
+    ConstD,
     Load,
+    LoadD,
     Store,
+    StoreD,
     Add,
     AddD,
     Sub,
     SubD,
     Div,
+    DivD,
     Mul,
+    MulD,
     And,
+    AndD,
     Or,
+    OrD,
     Xor,
+    XorD,
     Not,
+    NotD,
     Cmp,
+    CmpD,
     Jmp,
     Vmctx,
     VmAdd,
@@ -119,46 +129,46 @@ impl From<iced_x86::Register> for Register {
 
 macro_rules! binary_op {
     ($self:ident, $op:ident) => {{
-        let result = read_unaligned($self.sp.sub(1)).$op(read_unaligned($self.sp));
+        let (op2, op1) = ($self.stack_pop::<u64>(), $self.stack_pop::<u64>());
+        let result = op1.$op(op2);
 
-        write_unaligned(
-            $self.sp.sub(1),
-            result,
-        );
-
-        $self.sp = $self.sp.sub(1);
+        $self.stack_push(result);
     }}
 }
 
 macro_rules! binary_op_save_flags {
     ($self:ident, $bit:ident, $op:ident) => {{
-        let result = read_unaligned($self.sp.sub(1) as *const $bit).$op(read_unaligned($self.sp as *const $bit));
+        let (op2, op1) = if size_of::<$bit>() == 1 {
+            ($self.stack_pop::<u16>() as $bit, $self.stack_pop::<u16>() as $bit)
+        } else {
+            ($self.stack_pop::<$bit>(), $self.stack_pop::<$bit>())
+        };
+
+        let result = op1.$op(op2);
 
         $self.set_rflags();
 
-        write_unaligned(
-            $self.sp.sub(1),
-            result as _,
-        );
 
-        $self.sp = $self.sp.sub(1);
+        if size_of::<$bit>() == 1 {
+            $self.stack_push(result as u16);
+        } else {
+            $self.stack_push(result);
+        }
     }}
 }
+
 
 macro_rules! binary_op_arg1_save_flags {
-    ($self:ident, $op:ident) => {{
-        let result = read_unaligned($self.sp).$op();
+    ($self:ident, $bit:ident, $op:ident) => {{
+        let op1 = $self.stack_pop::<$bit>();
+        let result = op1.$op();
 
         $self.set_rflags();
 
-        write_unaligned(
-            $self.sp.sub(1),
-            result,
-        );
-
-        $self.sp = $self.sp.sub(1);
+        $self.stack_push(result);
     }}
 }
+
 
 #[repr(C)]
 pub struct Machine {
@@ -274,6 +284,20 @@ impl Machine {
         Ok(m)
     }
 
+    unsafe fn stack_push<T: Sized>(&mut self, value: T) {
+        assert_eq!(size_of::<T>() % 2, 0);
+        self.sp = self.sp.cast::<T>().sub(1) as _;
+        self.sp.cast::<T>().write_unaligned(value);
+    }
+
+    unsafe fn stack_pop<T: Sized>(&mut self) -> T {
+        assert_eq!(size_of::<T>() % 2, 0);
+        let value = self.sp.cast::<T>().read_unaligned();
+        //*self.sp.cast::<T>() = null();
+        self.sp = self.sp.cast::<T>().add(1) as _;
+        value
+    }
+
     #[inline(always)]
     pub fn set_rflags(&mut self) {
         self.rflags = x86::bits64::rflags::read();
@@ -283,7 +307,8 @@ impl Machine {
     pub unsafe extern "C" fn run(&mut self) {
         self.pc = self.program.as_ptr();
         let start_pc = self.pc;
-        self.sp = self.vmstack.as_mut_ptr();
+        self.sp = self.vmstack.as_mut_ptr()
+            .add((self.vmstack.len() - 0x100 - size_of::<u64>()) / size_of::<*mut u64>());
 
         while self.pc < self.program.as_ptr_range().end {
             let op = Opcode::try_from(*self.pc).unwrap();
@@ -291,14 +316,34 @@ impl Machine {
 
             match op {
                 Opcode::Const => {
-                    write_unaligned(self.sp.add(1), read_unaligned(self.pc as *const u64));
-                    self.sp = self.sp.add(1);
+                    self.stack_push(read_unaligned(self.pc as *const u64));
                     self.pc = self.pc.add(size_of::<u64>());
+                },
+                Opcode::ConstD => {
+                    self.stack_push(read_unaligned(self.pc as *const u32));
+                    self.pc = self.pc.add(size_of::<u32>());
                 }
-                Opcode::Load => *self.sp = *(*self.sp as *const u64),
+                Opcode::Load => {
+                    let value = (self.stack_pop::<u64>() as *const u64).read_unaligned();
+                    self.stack_push::<u64>(value);
+                },
+                Opcode::LoadD => {
+                    let value = (self.stack_pop::<u64>() as *const u64).read_unaligned();
+                    self.stack_push::<u32>(value as u32);
+                },
                 Opcode::Store => {
-                    write_unaligned(*self.sp as *mut u64, read_unaligned(self.sp.sub(1)));
-                    self.sp = self.sp.sub(2);
+                    let target_addr = self.stack_pop::<u64>();
+                    let value = self.stack_pop::<u64>();
+
+                    //  *self.stack_pop::<*mut u64>() = self.stack_pop::<u64>();
+                    write_unaligned(target_addr as *mut u64, value);
+                },
+                Opcode::StoreD => {
+                    let target_addr = self.stack_pop::<u64>();
+                    let value = self.stack_pop::<u32>();
+
+                    //  *self.stack_pop::<*mut u64>() = self.stack_pop::<u64>();
+                    write_unaligned(target_addr as *mut u64, value as u64);
                 }
                 // todo expand on this
                 // one solution is to have diff size opcodes
@@ -314,17 +359,34 @@ impl Machine {
                     let = stack-1.wrapping_add(read(stack))
                  */
                 Opcode::Div => binary_op_save_flags!(self, u64, wrapping_div), // unfinished
-                Opcode::Mul => binary_op_save_flags!(self, u64, wrapping_mul),
+                Opcode::DivD => binary_op_save_flags!(self, u32, wrapping_div), // unfinished
+                Opcode::Mul => {
+                    binary_op_save_flags!(self, u64, wrapping_mul);
+                },
+                Opcode::MulD => {
+                    binary_op_save_flags!(self, u32, wrapping_mul);
+                },
                 Opcode::Add => binary_op_save_flags!(self, u64, wrapping_add),
                 Opcode::AddD => binary_op_save_flags!(self, u32, wrapping_add),
                 Opcode::Sub => binary_op_save_flags!(self, u64, wrapping_sub),
                 Opcode::SubD => binary_op_save_flags!(self, u32, wrapping_sub),
                 Opcode::And => binary_op_save_flags!(self, u64, bitand),
+                Opcode::AndD => binary_op_save_flags!(self, u32, bitand),
                 Opcode::Or => binary_op_save_flags!(self, u64, bitor),
+                Opcode::OrD => binary_op_save_flags!(self, u32, bitor),
                 Opcode::Xor => binary_op_save_flags!(self, u64, bitxor),
-                Opcode::Not => binary_op_arg1_save_flags!(self, not),
+                Opcode::XorD => binary_op_save_flags!(self, u32, bitxor),
+                Opcode::Not => binary_op_arg1_save_flags!(self, u64, not),
+                Opcode::NotD => binary_op_arg1_save_flags!(self, u32, not),
                 Opcode::Cmp => {
-                    let result = read_unaligned(self.sp.sub(1)).wrapping_sub(read_unaligned(self.sp));
+                    let (op2, op1) = (self.stack_pop::<u64>(), self.stack_pop::<u64>());
+                    let result = op1.wrapping_sub(op2);
+                    self.set_rflags();
+                    drop(result);
+                },
+                Opcode::CmpD => {
+                    let (op2, op1) = (self.stack_pop::<u32>(), self.stack_pop::<u32>());
+                    let result = op1.wrapping_sub(op2);
                     self.set_rflags();
                     drop(result);
                 }
@@ -353,8 +415,7 @@ impl Machine {
                 Opcode::VmAdd => binary_op!(self, wrapping_add),
                 Opcode::VmSub => binary_op!(self, wrapping_sub),
                 Opcode::Vmctx => {
-                    write_unaligned(self.sp.add(1), self as *const _ as u64);
-                    self.sp = self.sp.add(1);
+                    self.stack_push(self as *const _ as u64);
                 }
                 Opcode::Vmexit => {
                     break;
@@ -362,6 +423,7 @@ impl Machine {
             }
         }
 
+        //    std::ptr::drop_in_place(addr_of_mut!((*self).vmstack));
         let vmexit: extern "C" fn(&mut Machine) =
             std::mem::transmute(self.vmexit.as_ptr::<()>());
         vmexit(self);
@@ -391,12 +453,25 @@ impl Assembler {
         self.emit_u64(v);
     }
 
+    pub fn constd_(&mut self, v: u32) {
+        self.emit(Opcode::ConstD);
+        self.emit_u32(v);
+    }
+
     pub fn load(&mut self) {
         self.emit(Opcode::Load);
     }
 
+    pub fn loadd(&mut self) {
+        self.emit(Opcode::LoadD);
+    }
+
     pub fn store(&mut self) {
         self.emit(Opcode::Store);
+    }
+
+    pub fn stored(&mut self) {
+        self.emit(Opcode::StoreD);
     }
 
     pub fn add(&mut self) {
@@ -419,28 +494,56 @@ impl Assembler {
         self.emit(Opcode::Div);
     }
 
+    pub fn divd(&mut self) {
+        self.emit(Opcode::DivD);
+    }
+
     pub fn mul(&mut self) {
         self.emit(Opcode::Mul);
+    }
+
+    pub fn muld(&mut self) {
+        self.emit(Opcode::MulD);
     }
 
     pub fn and(&mut self) {
         self.emit(Opcode::And);
     }
 
+    pub fn andd(&mut self) {
+        self.emit(Opcode::AndD);
+    }
+
     pub fn or(&mut self) {
         self.emit(Opcode::Or);
+    }
+
+    pub fn ord(&mut self) {
+        self.emit(Opcode::OrD);
     }
 
     pub fn xor(&mut self) {
         self.emit(Opcode::Xor);
     }
 
+    pub fn xord(&mut self) {
+        self.emit(Opcode::XorD);
+    }
+
     pub fn not(&mut self) {
         self.emit(Opcode::Not);
     }
 
+    pub fn notd(&mut self) {
+        self.emit(Opcode::NotD);
+    }
+
     pub fn cmp(&mut self) {
         self.emit(Opcode::Cmp);
+    }
+
+    pub fn cmpd(&mut self) {
+        self.emit(Opcode::CmpD);
     }
 
     pub fn jmp(&mut self, cond: JmpCond, target: u64) {
@@ -473,6 +576,10 @@ impl Assembler {
         self.program.push(byte);
     }
 
+    fn emit_u32(&mut self, value: u32) {
+        self.program.extend_from_slice(&value.to_le_bytes());
+    }
+
     fn emit_u64(&mut self, value: u64) {
         self.program.extend_from_slice(&value.to_le_bytes());
     }
@@ -496,6 +603,16 @@ pub fn disassemble(program: &[u8]) -> Result<String> {
                 let v = read_unaligned(pc as *const usize);
                 pc = pc.add(size_of::<u64>());
                 if let Ok(reg) = Register::try_from((v.wrapping_sub(offset_of!(Machine, regs))) as u8 / 8) {
+                    s.push_str(format!(" {:?}", reg).as_str());
+                } else {
+                    s.push_str(format!(" {}", v).as_str());
+                }
+            },
+            Opcode::ConstD => unsafe {
+                //let v = *(pc as *const u64);
+                let v = read_unaligned(pc as *const u32);
+                pc = pc.add(size_of::<u32>());
+                if let Ok(reg) = Register::try_from((v.wrapping_sub(offset_of!(Machine, regs) as u32)) as u8 / 8) {
                     s.push_str(format!(" {:?}", reg).as_str());
                 } else {
                     s.push_str(format!(" {}", v).as_str());

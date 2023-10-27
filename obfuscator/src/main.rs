@@ -3,6 +3,7 @@ use std::ops::BitXor;
 use exe::{Buffer, CCharString, Error, ImageSectionHeader, PE, PEType, RVA, SectionCharacteristics, VecPE};
 use iced_x86::code_asm::CodeAssembler;
 use symbolic_demangle::Demangle;
+use obfuscator::vm::machine::{Assembler, Machine};
 
 use crate::diassembler::Disassembler;
 use crate::pe::parser::MapFile;
