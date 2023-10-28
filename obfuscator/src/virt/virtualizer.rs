@@ -421,6 +421,9 @@ impl Virtualizer {
     }
 
     fn push(&mut self, inst: &Instruction) {
+        // do this for now
+        assert_eq!(inst.op0_kind(), OpKind::Register);
+
         use iced_x86::Register::RSP;
 
         vmasm!(self,
@@ -436,6 +439,9 @@ impl Virtualizer {
     }
 
     fn pop(&mut self, inst: &Instruction) {
+        // do this for now
+        assert_eq!(inst.op0_kind(), OpKind::Register);
+
         use iced_x86::Register::RSP;
 
         vmasm!(self,

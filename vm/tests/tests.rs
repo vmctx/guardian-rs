@@ -4,10 +4,6 @@ mod tests {
     use obfuscator::virt::virtualizer::virtualize;
     use vm::Machine;
 
-    // todo write test cases to verify instruction generate
-    // correct opcodes (size etc)
-    // MACHINE CANNOT BE REUSED!
-
     #[test]
     #[cfg(target_env = "msvc")]
     fn rax_and_eax() {
@@ -73,6 +69,9 @@ mod tests {
     #[test]
     #[cfg(target_env = "msvc")]
     fn virtualize_jmp_lbl() {
+        // todo this might not work properly in release
+        // because rflags is kinda ub, i cant predict the compiler
+        // generates the correct code 100% of the time
         use iced_x86::code_asm::*;
         let mut a = CodeAssembler::new(64).unwrap();
         let mut lbl = a.create_label();

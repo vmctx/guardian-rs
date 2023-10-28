@@ -22,6 +22,7 @@ global_asm!(include_str!("vm.asm"),
     r13 = const offset_of!(Machine, regs) + Register::R13 as u8 as usize * 8,
     r14 = const offset_of!(Machine, regs) + Register::R14 as u8 as usize * 8,
     r15 = const offset_of!(Machine, regs) + Register::R15 as u8 as usize * 8,
+    rflags = const offset_of!(Machine, rflags),
 );
 
 extern "C" {

@@ -161,11 +161,12 @@ enum OperandSize {
 
 #[repr(C)]
 pub struct Machine {
-    pub(crate) pc: *const u8,
-    pub(crate) sp: *mut u64,
-    pub regs: [u64; 16],
-    pub rflags: u64,
-    pub(crate) vmstack: Vec<u64>,
+    pc: *const u8,
+    sp: *mut u64,
+    regs: [u64; 16],
+    rflags: u64,
+    vmstack: Vec<u64>,
+    cpustack: Vec<u8>,
     #[cfg(feature = "testing")]
     pub vmenter: region::Allocation,
     #[cfg(feature = "testing")]
@@ -182,6 +183,7 @@ impl Machine {
                 regs: [0; 16],
                 rflags: 0,
                 vmstack: vec![0u64; 0x1000],
+                cpustack: vec![0u8; 0x1000],
             };
         }
     }
@@ -197,6 +199,7 @@ impl Machine {
             regs: [0; 16],
             rflags: 0,
             vmstack: vec![0u64; 0x1000],
+            cpustack: vec![0u8; 0x1000],
             vmenter: region::alloc(region::page::size(), region::Protection::READ_WRITE_EXECUTE)?,
             vmexit: region::alloc(region::page::size(), region::Protection::READ_WRITE_EXECUTE)?,
         };
@@ -233,8 +236,18 @@ impl Machine {
             a.mov(qword_ptr(rax + offset), **reg).unwrap();
         }
 
-        // Switch to the VM's CPU stack.
+        // save rflags
+        a.pushfq().unwrap();
+        a.pop(rcx).unwrap();
+        a.mov(qword_ptr(rax + memoffset::offset_of!(Machine, rflags)), rcx).unwrap();
 
+        // Switch to the VM's CPU stack.
+        let vm_rsp = unsafe {
+            m.cpustack
+                .as_ptr()
+                .add(m.cpustack.len() - 0x100 - size_of::<u64>()) as u64
+        };
+        a.mov(rsp, vm_rsp).unwrap();
 
         a.mov(rcx, rax).unwrap();
         a.mov(rdx, program as u64).unwrap();
@@ -252,7 +265,7 @@ impl Machine {
             (&rax, Register::Rax.into()),
             (&rdx, Register::Rdx.into()),
             // (&rbx, Register::Rbx.into()),
-            (&rsp, Register::Rsp.into()),
+            (&rsp, Register::Rsp.into()), // change back to old stack from cpustack
             // (&rbp, Register::Rbp.into()),
             // (&rsi, Register::Rsi.into()),
             // (&rdi, Register::Rdi.into()),
@@ -264,10 +277,14 @@ impl Machine {
             // (&r13, Register::R13.into()),
             // (&r14, Register::R14.into()),
             // (&r15, Register::R15.into()),
-            // (&rcx, Register::Rbx.into()),
+            (&rcx, Register::Rcx.into()),
         ];
 
         let mut a = CodeAssembler::new(64).unwrap();
+        // restore rflags
+        a.mov(rax, qword_ptr(rax + memoffset::offset_of!(Machine, rflags))).unwrap();
+        a.push(rax).unwrap();
+        a.popfq().unwrap();
 
         // Restore the GPRs
         for (reg, regid) in regmap.iter() {
@@ -286,6 +303,7 @@ impl Machine {
         Ok(m)
     }
 
+    #[inline(never)]
     unsafe fn stack_push<T: Sized>(&mut self, value: T) {
         assert_eq!(size_of::<T>() % 2, 0);
         // stack overflow
@@ -294,6 +312,7 @@ impl Machine {
         self.sp.cast::<T>().write_unaligned(value);
     }
 
+    #[inline(never)]
     unsafe fn stack_pop<T: Sized>(&mut self) -> T {
         assert_eq!(size_of::<T>() % 2, 0);
         let value = self.sp.cast::<T>().read_unaligned();
