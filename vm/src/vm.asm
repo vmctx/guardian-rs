@@ -79,9 +79,9 @@ vmenter:
     mov [rax + {r13}], r13
     mov [rax + {r14}], r14
     mov [rax + {r15}], r15
+    sub rsp, 0x10 // fix stack ptr back to be able to pop it
     pop rcx // pop rflags into rcx
     mov [rax + {rflags}], rcx
-    sub rsp, 8 // fix stack ptr back to be able to pop it
     // &mut Machine
     mov rcx,          rax
     // pop bytecode ptr, add it to image base addr = boom
@@ -93,6 +93,9 @@ vmenter:
     jmp run
 
 vmexit:
+    mov rax, [rcx + {rflags}]
+    push rax
+    popfq
     mov rax, [rcx + {rax}]
     mov rdx, [rcx + {rdx}]
     // mov rbx, [rcx + {rbx}] // non vol
