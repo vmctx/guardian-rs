@@ -48,7 +48,7 @@ pop     rbx
 
 vmentry:
    // avoid new_vm call from changing registers like that
-    //pushfq // save rflags
+    pushfq // save rflags
     pushvol
     sub rsp, {sizeof_machine}
     mov rcx, rsp
@@ -62,8 +62,7 @@ vmenter:
     // todo save rflags incase of rentering vm, be
     // aware of instrs modifying rflags
     // move registers into machines registerswdym
-    //add rsp, 0x10 // because i didnt pop the bytecode ptr and rflags yet
-    add rsp, 0x8
+    add rsp, 0x10 // because i didnt pop the bytecode ptr and rflags yet
     mov [rax + {rax}], rax
     mov [rax + {rcx}], rcx
     mov [rax + {rdx}], rdx
@@ -80,9 +79,8 @@ vmenter:
     mov [rax + {r13}], r13
     mov [rax + {r14}], r14
     mov [rax + {r15}], r15
-    //sub rsp, 0x10 // fix stack ptr back to be able to pop it
-    sub rsp, 0x8
-    //pop rcx // pop rflags into rcx
+    sub rsp, 0x10 // fix stack ptr back to be able to pop it
+    pop rcx // pop rflags into rcx
     //mov [rax + {rflags}], rcx
     // &mut Machine
     mov rcx,          rax
@@ -99,9 +97,9 @@ vmenter:
     jmp run
 
 vmexit:
-    //mov rax, [rcx + {rflags}]
-    //push rax
-    //popfq
+    mov rax, [rcx + {rflags}]
+    push rax
+    popfq
     mov rax, [rcx + {rax}]
     mov rdx, [rcx + {rdx}]
     // mov rbx, [rcx + {rbx}] // non vol

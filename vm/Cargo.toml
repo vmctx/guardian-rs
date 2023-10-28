@@ -15,6 +15,7 @@ path = "src/lib.rs"
 [dependencies]
 libc = { version = "0.2.149", default-features = false }
 bitflags = "2.4.0"
+static_assertions = "1.1.0"
 anyhow = { workspace = true, optional = true }
 num_enum.workspace = true
 memoffset.workspace = true

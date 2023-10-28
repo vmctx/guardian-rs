@@ -10,10 +10,11 @@ use alloc::vec::Vec;
 use core::convert::TryFrom;
 use core::mem::size_of;
 use core::ops::{BitAnd, BitOr, BitXor, Not};
-use core::ptr::{addr_of_mut, drop_in_place, read_unaligned, write_unaligned};
+use core::ptr::{read_unaligned, write_unaligned};
+use core::ptr::{drop_in_place, addr_of_mut};
+use core::mem::forget;
 
 use x86::bits64::rflags::RFlags;
-
 
 use crate::vm::vmexit;
 
@@ -26,6 +27,9 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
 #[cfg(not(feature = "testing"))]
 mod crt;
 // mod region;
+
+const VM_STACK_SIZE: usize = 0x1000;
+const CPU_STACK_SIZE: usize = 0x1000;
 
 mod vm;
 mod syscalls;
@@ -166,6 +170,9 @@ pub struct Machine {
     regs: [u64; 16],
     rflags: u64,
     vmstack: Vec<u64>,
+    #[cfg(not(feature = "testing"))]
+    cpustack: *mut u8,
+    #[cfg(feature = "testing")]
     cpustack: Vec<u8>,
     #[cfg(feature = "testing")]
     pub vmenter: region::Allocation,
@@ -173,18 +180,23 @@ pub struct Machine {
     pub(crate) vmexit: region::Allocation,
 }
 
+// check why anything bigger than this causes issues with my example program
+static_assertions::const_assert_eq!(core::mem::size_of::<Machine>(), 0xb8);
+
 impl Machine {
     #[no_mangle]
     pub unsafe extern "C" fn new_vm(out: *mut Self) {
         #[cfg(not(feature = "testing"))] {
+            let mut cpustack = vec![0u8; CPU_STACK_SIZE];
             *out = Self {
                 pc: core::ptr::null(),
                 sp: core::ptr::null_mut(),
                 regs: [0; 16],
                 rflags: 0,
-                vmstack: vec![0u64; 0x1000],
-                cpustack: vec![0u8; 0x1000],
+                vmstack: vec![0u64; VM_STACK_SIZE],
+                cpustack: cpustack.as_mut_ptr(),
             };
+            forget(cpustack);
         }
     }
 
@@ -198,8 +210,8 @@ impl Machine {
             sp: core::ptr::null_mut(),
             regs: [0; 16],
             rflags: 0,
-            vmstack: vec![0u64; 0x1000],
-            cpustack: vec![0u8; 0x1000],
+            vmstack: vec![0u64; VM_STACK_SIZE],
+            cpustack: vec![0u8; CPU_STACK_SIZE],
             vmenter: region::alloc(region::page::size(), region::Protection::READ_WRITE_EXECUTE)?,
             vmexit: region::alloc(region::page::size(), region::Protection::READ_WRITE_EXECUTE)?,
         };
