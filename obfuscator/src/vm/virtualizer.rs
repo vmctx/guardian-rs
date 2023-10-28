@@ -201,6 +201,13 @@ impl Virtualizer {
     }
 
     fn mov(&mut self, inst: &Instruction) {
+        // todo add virtual instructions to bit shift left and right
+        // then when virtaulizing those higher-8bit registers, just emit shift instructions appropriately so your normal add/sub/etc instructions work as expected
+        // so mov ah, someething
+        // would be shift lower 8 bit to higher 8 bit, do mov, shift back
+        // ALSO !!
+        // todo remember that it writing to 16 and 8 bit registers doesn't clear the other bits in a register like writing to 32-bit
+        // so when you shift back you need to mask and and the existing value of the register correctly
         vmasm!(self,
             load_operand inst, 1;
             store_operand inst, 0;
@@ -575,6 +582,9 @@ impl Asm for Virtualizer {
             // sub can have immediates as example
             OpKind::Immediate8to32 => {
                 self.constd_(inst.immediate8to32() as u32)
+            }
+            OpKind::Immediate32 => {
+                self.constd_(inst.immediate32())
             }
             OpKind::Immediate8to64 => {
                 self.const_(inst.immediate8to64() as u64)

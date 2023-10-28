@@ -334,15 +334,11 @@ impl Machine {
                 Opcode::Store => {
                     let target_addr = self.stack_pop::<u64>();
                     let value = self.stack_pop::<u64>();
-
-                    //  *self.stack_pop::<*mut u64>() = self.stack_pop::<u64>();
                     write_unaligned(target_addr as *mut u64, value);
                 },
                 Opcode::StoreD => {
                     let target_addr = self.stack_pop::<u64>();
                     let value = self.stack_pop::<u32>();
-
-                    //  *self.stack_pop::<*mut u64>() = self.stack_pop::<u64>();
                     write_unaligned(target_addr as *mut u64, value as u64);
                 }
                 // todo expand on this

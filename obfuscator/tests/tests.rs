@@ -3,6 +3,58 @@ mod tests {
     use obfuscator::vm::machine::{disassemble, Machine};
     use obfuscator::vm::virtualizer::virtualize;
 
+    // todo write test cases to verify instruction generate
+    // correct opcodes (size etc)
+
+    #[test]
+    #[cfg(target_env = "msvc")]
+    fn rax_and_eax() {
+        use iced_x86::code_asm::*;
+        let mut a = CodeAssembler::new(64).unwrap();
+        a.mov(rax, rcx).unwrap(); // mov first argument into rax
+        a.xor(eax, eax).unwrap();
+        a.ret().unwrap();
+
+        let m = Machine::new(&virtualize(&a.assemble(0).unwrap())).unwrap();
+        let f: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        assert_eq!(f(69), 0);
+    }
+
+    #[test]
+    #[cfg(target_env = "msvc")]
+    fn rax_and_ax() {
+        use iced_x86::code_asm::*;
+        let mut a = CodeAssembler::new(64).unwrap();
+        a.mov(rax, rcx).unwrap(); // mov first argument into rax (dividend)
+        a.mov(eax, 0x55556666u32).unwrap(); // mov second argument to rcx (divisor)
+        a.mov(ax, 0x7777).unwrap();
+        a.ret().unwrap();
+
+        let m = Machine::new(&virtualize(&a.assemble(0).unwrap())).unwrap();
+        let f: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        assert_eq!(f(0x1111222233334444), 2);
+    }
+
+    #[test]
+    #[cfg(target_env = "msvc")]
+    fn rax_and_ah_al() {
+        use iced_x86::code_asm::*;
+        let mut test: u32 = 0x11112222u32;
+        test = test << 8;
+
+        let mut a = CodeAssembler::new(64).unwrap();
+        a.mov(eax, 0x11112222).unwrap();
+        a.xor(al, al).unwrap(); // this should encode to normal 8 bit xor
+        a.mov(eax, 0x11112222).unwrap();
+        a.xor(ah, ah).unwrap(); // this should encode to bitshift higher with lower 8 bit, xor, then
+        // bitshift back
+        a.ret().unwrap();
+
+        let m = Machine::new(&virtualize(&a.assemble(0).unwrap())).unwrap();
+        let f: extern "C" fn() -> i64 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        assert_eq!(f(), 0);
+    }
+
     #[test]
     #[cfg(target_env = "msvc")]
     fn virtualizer_and_machine() {
