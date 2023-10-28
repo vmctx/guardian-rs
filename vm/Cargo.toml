@@ -1,0 +1,36 @@
+[package]
+name = "vm"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+
+[lib]
+crate-type = ["cdylib"]
+# testing: crate-type = ["cdylib", "rlib"]
+# cargo +nightly test --package vm --features testing
+doctest = false
+path = "src/lib.rs"
+
+
+[dependencies]
+libc = { version = "0.2.149", default-features = false }
+bitflags = "2.4.0"
+anyhow = { workspace = true, optional = true }
+num_enum.workspace = true
+memoffset.workspace = true
+x86.workspace = true
+syscalls = { path = "../../reddeadonline/crates/syscalls", default-features =  false, features = ["direct"] }
+#
+winapi = { version = "0.3.9", default-features = false, features = ["ntdef", "basetsd", "winnt"] }
+ntapi = { version = "0.4.0", default-features = false }
+hashbrown = "0.14.1"
+# only testing
+region = { version = "3.0.0", optional = true }
+iced-x86 = { workspace = true, optional = true }
+
+[dev-dependencies]
+obfuscator = { path= "../obfuscator" }
+
+[features]
+default = []
+testing = ["region", "iced-x86", "anyhow"]

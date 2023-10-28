@@ -25,5 +25,5 @@ global_asm!(include_str!("vm.asm"),
 );
 
 extern "C" {
-    pub fn vmexit(machine: &mut Machine) -> i32;
+    pub fn vmexit(machine: &mut Machine);
 }

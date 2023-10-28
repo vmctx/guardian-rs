@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use crate::vm::machine::{Assembler, Register, Machine, JmpCond};
+use crate::virt::machine::{Machine, Assembler, Register, JmpCond};
 use iced_x86::{Decoder, Formatter, Instruction, Mnemonic, NasmFormatter, OpKind};
 use memoffset::offset_of;
 

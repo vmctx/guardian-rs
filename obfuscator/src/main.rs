@@ -3,16 +3,15 @@ use std::ops::BitXor;
 use exe::{Buffer, CCharString, Error, ImageSectionHeader, PE, PEType, RVA, SectionCharacteristics, VecPE};
 use iced_x86::code_asm::CodeAssembler;
 use symbolic_demangle::Demangle;
-use obfuscator::vm::machine::{Assembler, Machine};
 
 use crate::diassembler::Disassembler;
 use crate::pe::parser::MapFile;
-use crate::vm::machine::disassemble;
-use crate::vm::virtualizer::{virtualize, virtualize_with_ip};
+use crate::virt::machine::{Assembler, disassemble};
+use crate::virt::virtualizer::{virtualize, virtualize_with_ip};
 
 mod diassembler;
 mod pe;
-mod vm;
+mod virt;
 
 // virtualization of code that is in between a call of function like begin_virtualization and end_virtualization
 // which are imported from a stub dll, the code is virtualized, a machine is created from the virtual code and the

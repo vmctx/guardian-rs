@@ -24,3 +24,7 @@ rustflags = [
     #"-C", "link-arg=/MERGE:.data=.text",
     "-Clink-arg=/MAP:target/x86_64-pc-windows-msvc/release/vm.map"
 ]
+
+# reduces binary size by 4kb
+[unstable]
+build-std = ["core", "std", "alloc"]
