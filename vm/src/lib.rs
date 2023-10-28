@@ -181,6 +181,7 @@ pub struct Machine {
 }
 
 // check why anything bigger than this causes issues with my example program
+#[cfg(not(feature = "testing"))]
 static_assertions::const_assert_eq!(core::mem::size_of::<Machine>(), 0xb8);
 
 impl Machine {

@@ -1,0 +1,16 @@
+[env]
+DEBUG_PATH = "target/x86_64-pc-windows-msvc/debug"
+RELEASE_PATH = "target/x86_64-pc-windows-msvc/release"
+
+[config]
+default_to_workspace = false
+
+[tasks.vm]
+script = [
+    "cd vm",
+    "%HOMEDRIVE%/%HOMEPATH%/.cargo/bin/cargo.exe +nightly b --release",
+]
+
+[tasks.test]
+toolchain = "nightly"
+install_crate = false
