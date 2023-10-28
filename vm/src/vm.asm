@@ -94,7 +94,9 @@ vmenter:
     add rax, {cpustack_offset}
     mov rsp, rax
     // run(&mut Machine, program);
-    jmp run
+    call run
+    mov rcx, rax
+    jmp vmexit
 
 vmexit:
     mov rax, [rcx + {rflags}]

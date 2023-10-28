@@ -8,6 +8,7 @@ extern crate alloc;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::convert::TryFrom;
+use core::hint::black_box;
 use core::mem::size_of;
 use core::ops::{BitAnd, BitOr, BitXor, Not};
 use core::ptr::{read_unaligned, write_unaligned};
@@ -176,8 +177,6 @@ pub struct Machine {
     cpustack: Vec<u8>,
     #[cfg(feature = "testing")]
     pub vmenter: region::Allocation,
-    #[cfg(feature = "testing")]
-    pub(crate) vmexit: region::Allocation,
 }
 
 // check why anything bigger than this causes issues with my example program
@@ -214,7 +213,6 @@ impl Machine {
             vmstack: vec![0u64; VM_STACK_SIZE],
             cpustack: vec![0u8; CPU_STACK_SIZE],
             vmenter: region::alloc(region::page::size(), region::Protection::READ_WRITE_EXECUTE)?,
-            vmexit: region::alloc(region::page::size(), region::Protection::READ_WRITE_EXECUTE)?,
         };
 
         // Generate VMENTER.
@@ -265,13 +263,7 @@ impl Machine {
         a.mov(rcx, rax).unwrap();
         a.mov(rdx, program as u64).unwrap();
         a.mov(rax, Machine::run as u64).unwrap();
-        a.jmp(rax).unwrap();
-
-        let insts = a.assemble(m.vmenter.as_ptr::<u64>() as u64).unwrap();
-
-        unsafe {
-            core::ptr::copy(insts.as_ptr(), m.vmenter.as_mut_ptr(), insts.len());
-        };
+        a.call(rax).unwrap();
 
         // Generate VMEXIT.
         let regmap: &[(&AsmRegister64, u8)] = &[
@@ -293,11 +285,12 @@ impl Machine {
             (&rcx, Register::Rcx.into()),
         ];
 
-        let mut a = CodeAssembler::new(64).unwrap();
         // restore rflags
         a.mov(rax, qword_ptr(rax + memoffset::offset_of!(Machine, rflags))).unwrap();
         a.push(rax).unwrap();
         a.popfq().unwrap();
+
+        a.mov(rcx, &mut m as *mut _ as u64).unwrap();
 
         // Restore the GPRs
         for (reg, regid) in regmap.iter() {
@@ -307,11 +300,12 @@ impl Machine {
 
         a.ret().unwrap();
 
-        let insts = a.assemble(m.vmexit.as_ptr::<u64>() as u64).unwrap();
+        let insts = a.assemble(m.vmenter.as_ptr::<u64>() as u64).unwrap();
 
         unsafe {
-            core::ptr::copy(insts.as_ptr(), m.vmexit.as_mut_ptr(), insts.len());
+            core::ptr::copy(insts.as_ptr(), m.vmenter.as_mut_ptr(), insts.len());
         };
+
 
         Ok(m)
     }
@@ -336,7 +330,7 @@ impl Machine {
 
     #[allow(clippy::missing_safety_doc)]
     #[no_mangle]
-    pub unsafe extern "C" fn run(&mut self, program: *const u8) {
+    pub unsafe extern "C" fn run(&mut self, program: *const u8) -> &mut Self {
         self.pc = program;
         self.sp = self.vmstack.as_mut_ptr()
             .add((self.vmstack.len() - 0x100 - size_of::<u64>()) / size_of::<*mut u64>());
@@ -417,13 +411,13 @@ impl Machine {
                     let (op2, op1) = (self.stack_pop::<u64>(), self.stack_pop::<u64>());
                     let result = op1.wrapping_sub(op2);
                     self.set_rflags();
-                    drop(result);
+                    black_box(result);
                 }
                 Opcode::CmpD => {
                     let (op2, op1) = (self.stack_pop::<u32>(), self.stack_pop::<u32>());
                     let result = op1.wrapping_sub(op2);
                     self.set_rflags();
-                    drop(result);
+                    black_box(result);
                 }
                 Opcode::Jmp => {
                     let rflags = RFlags::from_bits_truncate(self.rflags);
@@ -460,12 +454,11 @@ impl Machine {
         }
 
         // in tests it gets deallocated properly
-        #[cfg(not(feature = "testing"))]
-        drop_in_place(addr_of_mut!((*self).vmstack));
-        #[cfg(feature = "testing")]
-            let vmexit: extern "C" fn(&mut Machine) =
-            core::mem::transmute(self.vmexit.as_ptr::<()>());
-        vmexit(self);
+        #[cfg(not(feature = "testing"))] {
+            drop_in_place(addr_of_mut!((*self).vmstack));
+        }
+
+        self
     }
 
     #[inline(always)]
