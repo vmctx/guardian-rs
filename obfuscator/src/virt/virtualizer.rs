@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use crate::virt::machine::{Machine, Assembler, Register, JmpCond, OpSized, OpSize};
+use crate::virt::machine::{Machine, Assembler, Register, JmpCond, OpSized, OpSize, HigherLower8Bit, RegUp};
 use iced_x86::{Decoder, Formatter, Instruction, Mnemonic, NasmFormatter, OpKind};
 use memoffset::offset_of;
 
@@ -24,8 +24,8 @@ trait Asm {
     fn vmexit(&mut self);
     fn load_operand(&mut self, inst: &Instruction, operand: u32);
     fn store_operand(&mut self, inst: &Instruction, operand: u32);
-    fn load_reg(&mut self, inst: &Instruction, reg: iced_x86::Register);
-    fn store_reg(&mut self, inst: &Instruction, reg: iced_x86::Register);
+    fn load_reg(&mut self, reg: iced_x86::Register);
+    fn store_reg(&mut self, reg: iced_x86::Register);
     fn lea_operand(&mut self, inst: &Instruction);
 }
 
@@ -241,22 +241,22 @@ impl Virtualizer {
         match OpSize::try_from(inst.op0_register()).unwrap() {
             OpSize::Byte => panic!("unsupported operand size"),
             OpSize::Word => vmasm!(self,
-                load_reg, inst, AX;
+                load_reg, AX;
                 load_operand, inst, 0;
                 div::<u16>;
-                store_reg, inst, AX; // no clue
+                store_reg, AX; // no clue
             ),
             OpSize::Dword => vmasm!(self,
-                load_reg, inst, EAX;
+                load_reg, EAX;
                 load_operand, inst, 0;
                 div::<u32>;
-                store_reg, inst, EAX;
+                store_reg, EAX;
             ),
             OpSize::Qword => vmasm!(self,
-                load_reg, inst, RAX;
+                load_reg, RAX;
                 load_operand, inst, 0;
                 div::<u64>;
-                store_reg, inst, RAX;
+                store_reg, RAX;
             )
         };
     }
@@ -313,8 +313,9 @@ impl Virtualizer {
     }
 
     fn xor(&mut self, inst: &Instruction) {
+        // todo move all this match statement into the macro
         match OpSize::try_from(inst.op0_register()).unwrap() {
-            OpSize::Byte => panic!("unsupported operand size"),
+            OpSize::Byte => binary_op!(self, inst, xor::<u8>),
             OpSize::Word => binary_op!(self, inst, xor::<u16>),
             OpSize::Dword => binary_op!(self, inst, xor::<u32>),
             OpSize::Qword => binary_op!(self, inst, xor::<u64>)
@@ -384,13 +385,13 @@ impl Virtualizer {
         use iced_x86::Register::RSP;
 
         vmasm!(self,
-            load_reg, inst, RSP;
+            load_reg, RSP;
             const_::<u64>, 8;
             vmsub;
-            store_reg, inst, RSP;
+            store_reg, RSP;
 
             load_operand, inst, 0;
-            load_reg, inst, RSP;
+            load_reg, RSP;
             store::<u64>;
         );
     }
@@ -402,14 +403,14 @@ impl Virtualizer {
         use iced_x86::Register::RSP;
 
         vmasm!(self,
-            load_reg, inst, RSP;
+            load_reg, RSP;
             load::<u64>;
             store_operand, inst, 0;
 
-            load_reg, inst, RSP;
+            load_reg, RSP;
             const_::<u64>, 8;
             vmadd;
-            store_reg, inst, RSP;
+            store_reg, RSP;
         );
     }
 }
@@ -485,11 +486,13 @@ impl Asm for Virtualizer {
 
     fn load_operand(&mut self, inst: &Instruction, operand: u32) {
         match inst.op_kind(operand) {
-            OpKind::Register => self.load_reg(inst, inst.op_register(operand)),
+            OpKind::Register => self.load_reg(inst.op_register(operand)),
             OpKind::Memory => {
                 self.lea_operand(inst);
 
-                // todo regocnize if higher 8 bit or lower for 8 bit support
+                // TODO i think the code below is incorrect
+                // since it has to know the target bits, not the source register
+                // use operand arg instead
                 match OpSize::try_from(inst.op0_register()).unwrap() {
                     OpSize::Byte => panic!("unsupported load_mem size"),
                     OpSize::Word => self.asm.load::<u16>(),
@@ -524,7 +527,7 @@ impl Asm for Virtualizer {
 
     fn store_operand(&mut self, inst: &Instruction, operand: u32) {
         match inst.op_kind(operand) {
-            OpKind::Register => self.store_reg(inst, inst.op_register(operand)),
+            OpKind::Register => self.store_reg(inst.op_register(operand)),
             OpKind::Memory => {
                 assert_ne!(inst.op0_kind(), OpKind::Register);
                 self.lea_operand(inst);
@@ -544,7 +547,10 @@ impl Asm for Virtualizer {
                 }
                  */
 
-                // todo regocnize if higher 8 bit or lower for 8 bit support
+                // todo should a mov [addr], 8 bit reg/32 bit
+                // TODO i think the code below is incorrect
+                // since it has to know the target bits, not the source register
+                // use operand arg instead
                 match OpSize::try_from(inst.op1_register()).unwrap() {
                     OpSize::Byte => panic!("unsupported store_mem size"),
                     OpSize::Word => self.asm.store::<u16>(),
@@ -556,7 +562,7 @@ impl Asm for Virtualizer {
         }
     }
 
-    fn load_reg(&mut self, inst: &Instruction, reg: iced_x86::Register) {
+    fn load_reg(&mut self, reg: iced_x86::Register) {
         let r: u8 = Register::from(reg).into();
         let reg_offset = r as u64 * 8;
         self.asm.vmctx();
@@ -567,14 +573,20 @@ impl Asm for Virtualizer {
         let operand_size = OpSize::try_from(reg).unwrap();
 
         match operand_size {
-            OpSize::Byte => panic!("unsupported load_reg size"),
+            OpSize::Byte => if reg.is_higher_8_bit() {
+                self.asm.load::<u16>(); // load 8 is same as 16 bit anyways it will get truncated
+                // shift higher bits to lower on stack
+                self.asm.rot_right();
+            } else {
+                self.asm.load::<u8>()
+            },
             OpSize::Word => self.asm.load::<u16>(),
             OpSize::Dword => self.asm.load::<u32>(),
             OpSize::Qword => self.asm.load::<u64>()
         }
     }
 
-    fn store_reg(&mut self, inst: &Instruction, reg: iced_x86::Register) {
+    fn store_reg(&mut self, reg: iced_x86::Register) {
         let r: u8 = Register::from(reg).into();
         let reg_offset = r as u64 * 8;
         self.asm.vmctx();
@@ -585,7 +597,14 @@ impl Asm for Virtualizer {
         let operand_size = OpSize::try_from(reg).unwrap();
 
         match operand_size {
-            OpSize::Byte => panic!("unsupported store_reg size"),
+            OpSize::Byte => if reg.is_higher_8_bit() {
+                self.asm.store::<u8>();
+                self.load_reg(reg.get_gpr_16());
+                self.asm.rot_left();
+                self.store_reg(reg.get_gpr_16());
+            } else {
+                self.asm.store::<u8>()
+            },
             OpSize::Word => self.asm.store::<u16>(),
             OpSize::Dword => self.asm.store::<u32>(),
             OpSize::Qword => self.asm.store::<u64>()
@@ -594,11 +613,11 @@ impl Asm for Virtualizer {
 
     fn lea_operand(&mut self, inst: &Instruction) {
         if inst.memory_base() != iced_x86::Register::None {
-            self.load_reg(inst, inst.memory_base());
+            self.load_reg(inst.memory_base());
         }
 
         if inst.memory_index() != iced_x86::Register::None {
-            self.load_reg(inst, inst.memory_index());
+            self.load_reg(inst.memory_index());
             self.asm.const_(inst.memory_index_scale() as u64);
             self.asm.vmmul();
 

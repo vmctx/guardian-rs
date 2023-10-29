@@ -1,5 +1,4 @@
 use anyhow::Result;
-use std::mem::size_of;
 use std::ptr::read_unaligned;
 
 #[repr(C)]
@@ -36,6 +35,8 @@ pub enum Opcode {
     Xor,
     Not,
     Cmp,
+    RotR,
+    RotL,
     //
     Jmp,
     Vmctx,
@@ -88,6 +89,63 @@ impl From<iced_x86::Register> for OpSize {
     }
 }
 
+pub trait HigherLower8Bit {
+    fn is_higher_8_bit(&self) -> bool;
+    fn is_lower_8_bit(&self) -> bool;
+}
+
+impl HigherLower8Bit for iced_x86::Register {
+    fn is_higher_8_bit(&self) -> bool {
+        match self {
+            Self::AH | Self::BH |
+            Self::CH | Self::DH => true,
+            _ => false,
+        }
+    }
+
+    fn is_lower_8_bit(&self) -> bool {
+        match self {
+            Self::AL | Self::BL | Self::CL |
+            Self::DL | Self::SIL | Self::DIL
+            | Self::SPL | Self::BPL => true,
+            _ => false,
+        }
+    }
+}
+
+pub trait RegUp {
+    /// get 16 bit reg from 8 bit reg
+    fn get_gpr_16(self) -> Self;
+}
+
+impl RegUp for iced_x86::Register {
+    fn get_gpr_16(self) -> Self {
+        match self {
+            Self::AH => Self::AX,
+            Self::AL => Self::AX,
+            Self::BH => Self::BX,
+            Self::BL => Self::BX,
+            Self::CH => Self::CX,
+            Self::CL => Self::CX,
+            Self::DH => Self::DX,
+            Self::DL => Self::DX,
+            Self::SIL => Self::SI,
+            Self::DIL => Self::DI,
+            Self::SPL => Self::SP,
+            Self::BPL => Self::BP,
+            Self::R8L => Self::R8W,
+            Self::R9L => Self::R9W,
+            Self::R10L => Self::R10W,
+            Self::R11L => Self::R11W,
+            Self::R12L => Self::R12W,
+            Self::R13L => Self::R13W,
+            Self::R14L => Self::R14W,
+            Self::R15L => Self::R15W,
+            _ => Self::None
+        }
+    }
+}
+
 #[repr(C)]
 struct Instruction {
     op_code: Opcode,
@@ -109,7 +167,7 @@ impl Instruction {
 
     unsafe fn read_value(&self, instr_ptr: *const u8) -> Option<u64> {
         let val_ptr = match self.op_code {
-            Opcode::Const =>  instr_ptr.add(2),
+            Opcode::Const => instr_ptr.add(2),
             Opcode::Jmp => instr_ptr.add(3),
             _ => None?
         };
@@ -125,9 +183,9 @@ impl Instruction {
     pub fn length(&self) -> usize {
         let mut length = 2; // opcode + opsize
         length += match self.op_code {
-            Opcode::Const  => {
+            Opcode::Const => {
                 self.op_size as u8 as usize
-            },
+            }
             Opcode::Jmp => {
                 self.op_size as u8 as usize + 1 // jmp cond
             }
@@ -193,9 +251,9 @@ impl From<iced_x86::Register> for Register {
     fn from(reg: iced_x86::Register) -> Self {
         match reg {
             iced_x86::Register::RAX => Register::Rax,
+            iced_x86::Register::RBX => Register::Rbx,
             iced_x86::Register::RCX => Register::Rcx,
             iced_x86::Register::RDX => Register::Rdx,
-            iced_x86::Register::RBX => Register::Rbx,
             iced_x86::Register::RSP => Register::Rsp,
             iced_x86::Register::RBP => Register::Rbp,
             iced_x86::Register::RSI => Register::Rsi,
@@ -209,9 +267,9 @@ impl From<iced_x86::Register> for Register {
             iced_x86::Register::R14 => Register::R14,
             iced_x86::Register::R15 => Register::R15,
             iced_x86::Register::EAX => Register::Rax,
+            iced_x86::Register::EBX => Register::Rbx,
             iced_x86::Register::ECX => Register::Rcx,
             iced_x86::Register::EDX => Register::Rdx,
-            iced_x86::Register::EBX => Register::Rbx,
             iced_x86::Register::ESP => Register::Rsp,
             iced_x86::Register::EBP => Register::Rbp,
             iced_x86::Register::ESI => Register::Rsi,
@@ -224,7 +282,42 @@ impl From<iced_x86::Register> for Register {
             iced_x86::Register::R13D => Register::R13,
             iced_x86::Register::R14D => Register::R14,
             iced_x86::Register::R15D => Register::R15,
-            iced_x86::Register::AX => Register::Rax, // todo support rest
+            iced_x86::Register::AX => Register::Rax,
+            iced_x86::Register::BX => Register::Rbx,
+            iced_x86::Register::CX => Register::Rcx,
+            iced_x86::Register::DX => Register::Rdx,
+            iced_x86::Register::SI => Register::Rsi,
+            iced_x86::Register::DI => Register::Rdi,
+            iced_x86::Register::SP => Register::Rsp,
+            iced_x86::Register::BP => Register::Rbp,
+            iced_x86::Register::R8W => Register::R8,
+            iced_x86::Register::R9W => Register::R9,
+            iced_x86::Register::R10W => Register::R10,
+            iced_x86::Register::R11W => Register::R11,
+            iced_x86::Register::R12W => Register::R12,
+            iced_x86::Register::R13W => Register::R13,
+            iced_x86::Register::R14W => Register::R14,
+            iced_x86::Register::R15W => Register::R15,
+            iced_x86::Register::AH => Register::Rax,
+            iced_x86::Register::AL => Register::Rax,
+            iced_x86::Register::BH => Register::Rbx,
+            iced_x86::Register::BL => Register::Rbx,
+            iced_x86::Register::CH => Register::Rcx,
+            iced_x86::Register::CL => Register::Rcx,
+            iced_x86::Register::DH => Register::Rdx,
+            iced_x86::Register::DL => Register::Rdx,
+            iced_x86::Register::SIL => Register::Rsi,
+            iced_x86::Register::DIL => Register::Rdi,
+            iced_x86::Register::SPL => Register::Rsp,
+            iced_x86::Register::BPL => Register::Rbx,
+            iced_x86::Register::R8L => Register::R8,
+            iced_x86::Register::R9L => Register::R9,
+            iced_x86::Register::R10L => Register::R10,
+            iced_x86::Register::R11L => Register::R11,
+            iced_x86::Register::R12L => Register::R12,
+            iced_x86::Register::R13L => Register::R13,
+            iced_x86::Register::R14L => Register::R14,
+            iced_x86::Register::R15L => Register::R15,
             _ => panic!("unsupported register"),
         }
     }
@@ -303,6 +396,14 @@ impl Assembler {
         self.emit_const::<u64>(target);
     }
 
+    pub fn rot_right(&mut self) {
+        self.emit_sized::<u16>(Opcode::RotR);
+    }
+
+    pub fn rot_left(&mut self) {
+        self.emit_sized::<u16>(Opcode::RotL);
+    }
+
     pub fn vmadd(&mut self) {
         self.emit(Opcode::VmAdd);
     }
@@ -314,7 +415,6 @@ impl Assembler {
     pub fn vmmul(&mut self) {
         self.emit(Opcode::VmMul);
     }
-
 
     pub fn vmctx(&mut self) {
         self.emit(Opcode::Vmctx);

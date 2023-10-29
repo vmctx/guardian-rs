@@ -24,7 +24,7 @@ mod tests {
     fn rax_and_ax() {
         use iced_x86::code_asm::*;
         let mut a = CodeAssembler::new(64).unwrap();
-        a.mov(rax, rcx).unwrap(); // mov first argument into rax (dividend)
+        a.mov(rax, rcx).unwrap();
         a.mov(ax, 0x7777).unwrap();
         a.ret().unwrap();
 
@@ -42,6 +42,15 @@ mod tests {
         let mut a = CodeAssembler::new(64).unwrap();
         a.mov(eax, 0x11112222).unwrap();
         a.xor(al, al).unwrap(); // this should encode to normal 8 bit xor
+        // bitshift back
+        a.ret().unwrap();
+
+        let bytecode = virtualize(&a.assemble(0).unwrap());
+        let m = Machine::new(bytecode.as_ptr()).unwrap();
+        let f: extern "C" fn() -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        assert_eq!(f(), 0x11112200);
+
+        let mut a = CodeAssembler::new(64).unwrap();
         a.mov(eax, 0x11112222).unwrap();
         a.xor(ah, ah).unwrap(); // this should encode to bitshift higher with lower 8 bit, xor, then
         // bitshift back
@@ -49,8 +58,8 @@ mod tests {
 
         let bytecode = virtualize(&a.assemble(0).unwrap());
         let m = Machine::new(bytecode.as_ptr()).unwrap();
-        let f: extern "C" fn() -> i64 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
-        assert_eq!(f(), 0);
+        let f: extern "C" fn() -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        assert_eq!(f(), 0x11110022);
     }
 
     #[test]

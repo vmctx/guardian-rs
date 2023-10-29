@@ -59,6 +59,8 @@ pub enum Opcode {
     Xor,
     Not,
     Cmp,
+    RotR,
+    RotL,
     //
     Jmp,
     Vmctx,
@@ -141,16 +143,44 @@ pub(crate) use binary_op_save_flags;
 
 macro_rules! binary_op_arg1_save_flags {
     ($self:ident, $bit:ident, $op:ident) => {{
-        let op1 = unsafe { $self.stack_pop::<$bit>() };
+        let op1 = if core::mem::size_of::<$bit>() == 1 {
+            unsafe { $self.stack_pop::<u16>() as $bit }
+        } else {
+            unsafe { $self.stack_pop::<$bit>() }
+        };
         let result = op1.$op();
 
         $self.set_rflags();
 
-        unsafe { $self.stack_push(result); }
+         if core::mem::size_of::<$bit>() == 1 {
+            unsafe { $self.stack_push(result as u16); }
+        } else {
+            unsafe { $self.stack_push(result); }
+        }
     }}
 }
 
 pub(crate) use binary_op_arg1_save_flags;
+
+macro_rules! rotate {
+    ($self:ident, $bit:ident, $op:ident) => {{
+        let op1 = if core::mem::size_of::<$bit>() == 1 {
+            unsafe { $self.stack_pop::<u16>() as $bit }
+        } else {
+            unsafe { $self.stack_pop::<$bit>() }
+        };
+
+        let result = op1.$op(8);
+
+        if core::mem::size_of::<$bit>() == 1 {
+            unsafe { $self.stack_push(result as u16); }
+        } else {
+            unsafe { $self.stack_push(result); }
+        }
+    }}
+}
+
+pub(crate) use rotate;
 
 #[repr(u8)]
 #[derive(Debug, Copy, Clone, num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
@@ -234,8 +264,6 @@ impl Machine {
 
         let mut a = CodeAssembler::new(64).unwrap();
 
-        // todo this is kinda ub, since its a
-        // potential use after free
         a.mov(rax, &mut m as *mut _ as u64).unwrap();
 
         // Store the GPRs
@@ -356,6 +384,8 @@ impl Machine {
                 Opcode::Xor => handlers::xor::xor(self, op_size),
                 Opcode::Not => handlers::not::not(self, op_size),
                 Opcode::Cmp => handlers::cmp::cmp(self, op_size),
+                Opcode::RotR => handlers::rot::rot_r(self, op_size),
+                Opcode::RotL => handlers::rot::rot_l(self, op_size),
                 Opcode::Jmp => {
                     let rflags = RFlags::from_bits_truncate(self.rflags);
                     let do_jmp = match JmpCond::try_from(*self.pc).unwrap() {
