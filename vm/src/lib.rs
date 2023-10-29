@@ -389,12 +389,8 @@ impl Machine {
                  */
                 Opcode::Div => binary_op_save_flags!(self, u64, wrapping_div), // unfinished
                 Opcode::DivD => binary_op_save_flags!(self, u32, wrapping_div), // unfinished
-                Opcode::Mul => {
-                    binary_op_save_flags!(self, u64, wrapping_mul);
-                }
-                Opcode::MulD => {
-                    binary_op_save_flags!(self, u32, wrapping_mul);
-                }
+                Opcode::Mul => binary_op_save_flags!(self, u64, wrapping_mul),
+                Opcode::MulD => binary_op_save_flags!(self, u32, wrapping_mul),
                 Opcode::Add => binary_op_save_flags!(self, u64, wrapping_add),
                 Opcode::AddD => binary_op_save_flags!(self, u32, wrapping_add),
                 Opcode::Sub => binary_op_save_flags!(self, u64, wrapping_sub),
