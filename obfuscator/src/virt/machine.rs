@@ -224,6 +224,7 @@ impl From<iced_x86::Register> for Register {
             iced_x86::Register::R13D => Register::R13,
             iced_x86::Register::R14D => Register::R14,
             iced_x86::Register::R15D => Register::R15,
+            iced_x86::Register::AX => Register::Rax, // todo support rest
             _ => panic!("unsupported register"),
         }
     }

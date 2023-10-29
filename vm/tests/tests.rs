@@ -25,14 +25,13 @@ mod tests {
         use iced_x86::code_asm::*;
         let mut a = CodeAssembler::new(64).unwrap();
         a.mov(rax, rcx).unwrap(); // mov first argument into rax (dividend)
-        a.mov(eax, 0x55556666u32).unwrap(); // mov second argument to rcx (divisor)
         a.mov(ax, 0x7777).unwrap();
         a.ret().unwrap();
 
         let bytecode = virtualize(&a.assemble(0).unwrap());
         let m = Machine::new(bytecode.as_ptr()).unwrap();
         let f: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
-        assert_eq!(f(0x1111222233334444), 2);
+        assert_eq!(f(0x1111222233334444), 0x1111222233337777);
     }
 
     #[test]

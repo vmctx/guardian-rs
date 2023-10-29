@@ -27,6 +27,7 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
 
 #[cfg(not(feature = "testing"))]
 mod crt;
+mod handlers;
 // mod region;
 
 const VM_STACK_SIZE: usize = 0x1000;
@@ -43,35 +44,26 @@ static ALLOCATOR: allocator::Allocator = allocator::Allocator;
 mod allocator;
 
 #[repr(u8)]
+#[derive(PartialEq)]
 #[derive(Debug, num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
 pub enum Opcode {
     Const,
-    ConstD,
     Load,
-    LoadD,
     Store,
-    StoreD,
     Add,
-    AddD,
     Sub,
-    SubD,
     Div,
-    DivD,
     Mul,
-    MulD,
     And,
-    AndD,
     Or,
-    OrD,
     Xor,
-    XorD,
     Not,
-    NotD,
     Cmp,
-    CmpD,
+    //
     Jmp,
     Vmctx,
     VmAdd,
+    VmMul,
     VmSub,
     Vmexit,
 }
@@ -115,19 +107,21 @@ pub enum Register {
 
 macro_rules! binary_op {
     ($self:ident, $op:ident) => {{
-        let (op2, op1) = ($self.stack_pop::<u64>(), $self.stack_pop::<u64>());
+        let (op2, op1) = unsafe { ($self.stack_pop::<u64>(), $self.stack_pop::<u64>()) };
         let result = op1.$op(op2);
 
-        $self.stack_push(result);
+        unsafe { $self.stack_push(result);}
     }}
 }
 
+pub(crate) use binary_op;
+
 macro_rules! binary_op_save_flags {
     ($self:ident, $bit:ident, $op:ident) => {{
-        let (op2, op1) = if size_of::<$bit>() == 1 {
-            ($self.stack_pop::<u16>() as $bit, $self.stack_pop::<u16>() as $bit)
+        let (op2, op1) = if core::mem::size_of::<$bit>() == 1 {
+            unsafe { ($self.stack_pop::<u16>() as $bit, $self.stack_pop::<u16>() as $bit) }
         } else {
-            ($self.stack_pop::<$bit>(), $self.stack_pop::<$bit>())
+            unsafe { ($self.stack_pop::<$bit>(), $self.stack_pop::<$bit>()) }
         };
 
         let result = op1.$op(op2);
@@ -135,33 +129,36 @@ macro_rules! binary_op_save_flags {
         $self.set_rflags();
 
 
-        if size_of::<$bit>() == 1 {
-            $self.stack_push(result as u16);
+        if core::mem::size_of::<$bit>() == 1 {
+            unsafe { $self.stack_push(result as u16); }
         } else {
-            $self.stack_push(result);
+            unsafe { $self.stack_push(result); }
         }
     }}
 }
 
+pub(crate) use binary_op_save_flags;
 
 macro_rules! binary_op_arg1_save_flags {
     ($self:ident, $bit:ident, $op:ident) => {{
-        let op1 = $self.stack_pop::<$bit>();
+        let op1 = unsafe { $self.stack_pop::<$bit>() };
         let result = op1.$op();
 
         $self.set_rflags();
 
-        $self.stack_push(result);
+        unsafe { $self.stack_push(result); }
     }}
 }
 
+pub(crate) use binary_op_arg1_save_flags;
+
 #[repr(u8)]
-#[derive(Debug, num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
-enum OpSize {
-    Byte,
-    Word,
-    Dword,
-    Qword,
+#[derive(Debug, Copy, Clone, num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
+pub enum OpSize {
+    Byte = 1,
+    Word = 2,
+    Dword = 4,
+    Qword = 8,
 }
 
 #[repr(C)]
@@ -339,82 +336,26 @@ impl Machine {
         // compilation doesnt do it the way i want
         loop {
             let op = Opcode::try_from(*self.pc).unwrap();
+            let op_size = OpSize::try_from(self.pc.add(1).read_unaligned())
+                .unwrap();
             // increase program counter by one byte
             // for const, this will load the address
-            self.pc = self.pc.add(1);
+            // this is now at op size
+            self.pc = self.pc.add(2);
 
             match op {
-                Opcode::Const => {
-                    self.stack_push(read_unaligned(self.pc as *const u64));
-                    self.pc = self.pc.add(size_of::<u64>());
-                }
-                Opcode::ConstD => {
-                    self.stack_push(read_unaligned(self.pc as *const u32));
-                    self.pc = self.pc.add(size_of::<u32>());
-                }
-                Opcode::Load => {
-                    let value = (self.stack_pop::<u64>() as *const u64).read_unaligned();
-                    self.stack_push::<u64>(value);
-                }
-                Opcode::LoadD => {
-                    let value = (self.stack_pop::<u64>() as *const u64).read_unaligned();
-                    self.stack_push::<u32>(value as u32);
-                }
-                Opcode::Store => {
-                    let target_addr = self.stack_pop::<u64>();
-                    let value = self.stack_pop::<u64>();
-
-                    //  *self.stack_pop::<*mut u64>() = self.stack_pop::<u64>();
-                    write_unaligned(target_addr as *mut u64, value);
-                }
-                Opcode::StoreD => {
-                    let target_addr = self.stack_pop::<u64>();
-                    let value = self.stack_pop::<u32>();
-
-                    //  *self.stack_pop::<*mut u64>() = self.stack_pop::<u64>();
-                    write_unaligned(target_addr as *mut u64, value as u64);
-                }
-                // todo expand on this
-                // one solution is to have diff size opcodes
-                /*
-                opcode Add = 32bit
-                opcode AddQ = 64bit
-                opcode AddW = 16bit
-                opcode AddB = 8 bit
-
-                opcode add:
-                    let = stack-1.wrapping_add(read(stack as *const i32/u32))
-                opcode addq:
-                    let = stack-1.wrapping_add(read(stack))
-                 */
-                Opcode::Div => binary_op_save_flags!(self, u64, wrapping_div), // unfinished
-                Opcode::DivD => binary_op_save_flags!(self, u32, wrapping_div), // unfinished
-                Opcode::Mul => binary_op_save_flags!(self, u64, wrapping_mul),
-                Opcode::MulD => binary_op_save_flags!(self, u32, wrapping_mul),
-                Opcode::Add => binary_op_save_flags!(self, u64, wrapping_add),
-                Opcode::AddD => binary_op_save_flags!(self, u32, wrapping_add),
-                Opcode::Sub => binary_op_save_flags!(self, u64, wrapping_sub),
-                Opcode::SubD => binary_op_save_flags!(self, u32, wrapping_sub),
-                Opcode::And => binary_op_save_flags!(self, u64, bitand),
-                Opcode::AndD => binary_op_save_flags!(self, u32, bitand),
-                Opcode::Or => binary_op_save_flags!(self, u64, bitor),
-                Opcode::OrD => binary_op_save_flags!(self, u32, bitor),
-                Opcode::Xor => binary_op_save_flags!(self, u64, bitxor),
-                Opcode::XorD => binary_op_save_flags!(self, u32, bitxor),
-                Opcode::Not => binary_op_arg1_save_flags!(self, u64, not),
-                Opcode::NotD => binary_op_arg1_save_flags!(self, u32, not),
-                Opcode::Cmp => {
-                    let (op2, op1) = (self.stack_pop::<u64>(), self.stack_pop::<u64>());
-                    let result = op1.wrapping_sub(op2);
-                    self.set_rflags();
-                    black_box(result);
-                }
-                Opcode::CmpD => {
-                    let (op2, op1) = (self.stack_pop::<u32>(), self.stack_pop::<u32>());
-                    let result = op1.wrapping_sub(op2);
-                    self.set_rflags();
-                    black_box(result);
-                }
+                Opcode::Const => handlers::r#const::r#const(self, op_size),
+                Opcode::Load => handlers::load::load(self, op_size),
+                Opcode::Store => handlers::store::store(self, op_size),
+                Opcode::Div => handlers::div::div(self, op_size), // unfinished
+                Opcode::Mul => handlers::mul::mul(self, op_size),
+                Opcode::Add => handlers::add::add(self, op_size),
+                Opcode::Sub => handlers::sub::sub(self, op_size),
+                Opcode::And => handlers::and::and(self, op_size),
+                Opcode::Or => handlers::or::or(self, op_size),
+                Opcode::Xor => handlers::xor::xor(self, op_size),
+                Opcode::Not => handlers::not::not(self, op_size),
+                Opcode::Cmp => handlers::cmp::cmp(self, op_size),
                 Opcode::Jmp => {
                     let rflags = RFlags::from_bits_truncate(self.rflags);
                     let do_jmp = match JmpCond::try_from(*self.pc).unwrap() {
@@ -430,7 +371,7 @@ impl Machine {
                         JmpCond::Jg => rflags.contains(RFlags::FLAGS_SF) == rflags.contains(RFlags::FLAGS_OF) && !rflags.contains(RFlags::FLAGS_ZF)
                     };
 
-                    self.pc = self.pc.add(1); // jmpcond
+                    self.pc = self.pc.add(1); // skip jmpcond
 
                     if do_jmp {
                         self.pc = program.add(read_unaligned(self.pc as *const u64) as _);
@@ -440,6 +381,7 @@ impl Machine {
                 }
                 Opcode::VmAdd => binary_op!(self, wrapping_add),
                 Opcode::VmSub => binary_op!(self, wrapping_sub),
+                Opcode::VmMul => binary_op!(self, wrapping_mul),
                 Opcode::Vmctx => {
                     self.stack_push(self as *const _ as u64);
                 }

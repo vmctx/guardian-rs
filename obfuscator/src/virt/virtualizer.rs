@@ -277,7 +277,7 @@ impl Virtualizer {
                 OpSize::Byte => panic!("unsupported operand size"),
                 OpSize::Word => vmasm!(self, div::<u16>;),
                 OpSize::Dword => vmasm!(self, div::<u32>;),
-                OpSize::Qword => vmasm!(self, div::<u16>;),
+                OpSize::Qword => vmasm!(self, div::<u64>;),
             }
             vmasm!(self,
                 store_operand, inst, 0;
@@ -407,7 +407,7 @@ impl Virtualizer {
             store_operand, inst, 0;
 
             load_reg, inst, RSP;
-            const_, 8u64;
+            const_::<u64>, 8;
             vmadd;
             store_reg, inst, RSP;
         );
@@ -500,6 +500,12 @@ impl Asm for Virtualizer {
             // todo maybe use traits to restrict opkinds on some functions
             // like div which can only have register and memory
             // sub can have immediates as example
+            OpKind::Immediate16 => {
+                self.const_(inst.immediate16())
+            }
+            OpKind::Immediate8to16 => {
+                self.const_(inst.immediate8to16() as u64)
+            }
             OpKind::Immediate8to32 => {
                 self.const_(inst.immediate8to32() as u32)
             }
@@ -562,7 +568,7 @@ impl Asm for Virtualizer {
 
         match operand_size {
             OpSize::Byte => panic!("unsupported load_reg size"),
-            OpSize::Word => panic!("unsupported load_reg size"),
+            OpSize::Word => self.asm.load::<u16>(),
             OpSize::Dword => self.asm.load::<u32>(),
             OpSize::Qword => self.asm.load::<u64>()
         }
@@ -579,8 +585,8 @@ impl Asm for Virtualizer {
         let operand_size = OpSize::try_from(reg).unwrap();
 
         match operand_size {
-            OpSize::Byte => panic!("unsupported load_reg size"),
-            OpSize::Word => panic!("unsupported load_reg size"),
+            OpSize::Byte => panic!("unsupported store_reg size"),
+            OpSize::Word => self.asm.store::<u16>(),
             OpSize::Dword => self.asm.store::<u32>(),
             OpSize::Qword => self.asm.store::<u64>()
         }
