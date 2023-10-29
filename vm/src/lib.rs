@@ -157,7 +157,7 @@ macro_rules! binary_op_arg1_save_flags {
 
 #[repr(u8)]
 #[derive(Debug, num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
-enum OperandSize {
+enum OpSize {
     Byte,
     Word,
     Dword,

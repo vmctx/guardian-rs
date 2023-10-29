@@ -12,37 +12,129 @@ pub struct Machine {
 }
 
 #[repr(u8)]
+#[derive(Debug, Copy, Clone, num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
+pub enum OpSize {
+    Byte = 1,
+    Word = 2,
+    Dword = 4,
+    Qword = 8,
+}
+
+#[repr(u8)]
+#[derive(PartialEq)]
 #[derive(Debug, num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
 pub enum Opcode {
     Const,
-    ConstD,
     Load,
-    LoadD,
     Store,
-    StoreD,
     Add,
-    AddD,
     Sub,
-    SubD,
     Div,
-    DivD,
     Mul,
-    MulD,
     And,
-    AndD,
     Or,
-    OrD,
     Xor,
-    XorD,
     Not,
-    NotD,
     Cmp,
-    CmpD,
+    //
     Jmp,
     Vmctx,
     VmAdd,
+    VmMul,
     VmSub,
     Vmexit,
+}
+
+pub trait OpSized: Sized {
+    fn to_le_bytes(self) -> Vec<u8>;
+    fn as_op_size() -> OpSize;
+}
+
+impl OpSized for u8 {
+    fn to_le_bytes(self) -> Vec<u8> { self.to_le_bytes().to_vec() }
+    fn as_op_size() -> OpSize { OpSize::Byte }
+}
+
+impl OpSized for u16 {
+    fn to_le_bytes(self) -> Vec<u8> { self.to_le_bytes().to_vec() }
+    fn as_op_size() -> OpSize { OpSize::Word }
+}
+
+impl OpSized for u32 {
+    fn to_le_bytes(self) -> Vec<u8> { self.to_le_bytes().to_vec() }
+    fn as_op_size() -> OpSize { OpSize::Dword }
+}
+
+impl OpSized for u64 {
+    fn to_le_bytes(self) -> Vec<u8> { self.to_le_bytes().to_vec() }
+    fn as_op_size() -> OpSize { OpSize::Qword }
+}
+
+impl From<iced_x86::Register> for OpSize {
+    fn from(reg: iced_x86::Register) -> Self {
+        if !reg.is_gpr() {
+            panic!("{:?} unsupported register", reg);
+        }
+
+        if reg.is_gpr8() {
+            OpSize::Byte
+        } else if reg.is_gpr16() {
+            OpSize::Word
+        } else if reg.is_gpr32() {
+            OpSize::Dword
+        } else {
+            OpSize::Qword
+        }
+    }
+}
+
+#[repr(C)]
+struct Instruction {
+    op_code: Opcode,
+    op_size: OpSize,
+    // some dont have size encoded
+    value: Option<u64>,//Option<T>
+}
+
+impl Instruction {
+    pub unsafe fn from_ptr(instr_ptr: *const u8) -> Option<Self> {
+        let op_code = Opcode::try_from(instr_ptr.read_unaligned()).ok()?;
+        let op_size = OpSize::try_from(instr_ptr.add(1).read_unaligned()).ok()?;
+
+        let mut instr = Self { op_code, op_size, value: None };
+        instr.value = instr.read_value(instr_ptr);
+
+        Some(instr)
+    }
+
+    unsafe fn read_value(&self, instr_ptr: *const u8) -> Option<u64> {
+        let val_ptr = match self.op_code {
+            Opcode::Const =>  instr_ptr.add(2),
+            Opcode::Jmp => instr_ptr.add(3),
+            _ => None?
+        };
+        let v = match self.op_size {
+            OpSize::Qword => read_unaligned::<u64>(val_ptr as *const u64),
+            OpSize::Dword => read_unaligned(val_ptr as *const u32) as u64,
+            OpSize::Word => read_unaligned(val_ptr as *const u16) as u64,
+            OpSize::Byte => read_unaligned(val_ptr) as u64,
+        };
+        Some(v)
+    }
+
+    pub fn length(&self) -> usize {
+        let mut length = 2; // opcode + opsize
+        length += match self.op_code {
+            Opcode::Const  => {
+                self.op_size as u8 as usize
+            },
+            Opcode::Jmp => {
+                self.op_size as u8 as usize + 1 // jmp cond
+            }
+            _ => 0
+        };
+        length
+    }
 }
 
 #[repr(u8)]
@@ -50,10 +142,14 @@ pub enum Opcode {
 pub enum JmpCond {
     Jmp,
     Je,
-    Jne, //  Jnz,
-    Jbe, // Jna,
-    Ja, // Jnbe
-    Jle, // Jng
+    Jne,
+    //  Jnz,
+    Jbe,
+    // Jna,
+    Ja,
+    // Jnbe
+    Jle,
+    // Jng
     Jg, // Jnle
 }
 
@@ -151,108 +247,59 @@ impl Assembler {
         self.program[index..][..8].copy_from_slice(&value.to_le_bytes());
     }
 
-    pub fn const_(&mut self, v: u64) {
-        self.emit(Opcode::Const);
-        self.emit_u64(v);
+    pub fn const_<T: OpSized>(&mut self, v: T) {
+        self.emit_sized::<T>(Opcode::Const);
+        self.emit_const(v);
     }
 
-    pub fn constd_(&mut self, v: u32) {
-        self.emit(Opcode::ConstD);
-        self.emit_u32(v);
+    pub fn load<T: OpSized>(&mut self) {
+        self.emit_sized::<T>(Opcode::Load);
     }
 
-    pub fn load(&mut self) {
-        self.emit(Opcode::Load);
+    pub fn store<T: OpSized>(&mut self) {
+        self.emit_sized::<T>(Opcode::Store);
     }
 
-    pub fn loadd(&mut self) {
-        self.emit(Opcode::LoadD);
+    pub fn add<T: OpSized>(&mut self) {
+        self.emit_sized::<T>(Opcode::Add);
     }
 
-    pub fn store(&mut self) {
-        self.emit(Opcode::Store);
+    pub fn sub<T: OpSized>(&mut self) {
+        self.emit_sized::<T>(Opcode::Sub);
     }
 
-    pub fn stored(&mut self) {
-        self.emit(Opcode::StoreD);
+    pub fn div<T: OpSized>(&mut self) {
+        self.emit_sized::<T>(Opcode::Div);
     }
 
-    pub fn add(&mut self) {
-        self.emit(Opcode::Add);
+    pub fn mul<T: OpSized>(&mut self) {
+        self.emit_sized::<T>(Opcode::Mul);
     }
 
-    pub fn addd(&mut self) {
-        self.emit(Opcode::AddD);
+    pub fn and<T: OpSized>(&mut self) {
+        self.emit_sized::<T>(Opcode::And);
     }
 
-    pub fn sub(&mut self) {
-        self.emit(Opcode::Sub);
+    pub fn or<T: OpSized>(&mut self) {
+        self.emit_sized::<T>(Opcode::Or);
     }
 
-    pub fn subd(&mut self) {
-        self.emit(Opcode::SubD);
+    pub fn xor<T: OpSized>(&mut self) {
+        self.emit_sized::<T>(Opcode::Xor);
     }
 
-    pub fn div(&mut self) {
-        self.emit(Opcode::Div);
+    pub fn not<T: OpSized>(&mut self) {
+        self.emit_sized::<T>(Opcode::Not);
     }
 
-    pub fn divd(&mut self) {
-        self.emit(Opcode::DivD);
-    }
-
-    pub fn mul(&mut self) {
-        self.emit(Opcode::Mul);
-    }
-
-    pub fn muld(&mut self) {
-        self.emit(Opcode::MulD);
-    }
-
-    pub fn and(&mut self) {
-        self.emit(Opcode::And);
-    }
-
-    pub fn andd(&mut self) {
-        self.emit(Opcode::AndD);
-    }
-
-    pub fn or(&mut self) {
-        self.emit(Opcode::Or);
-    }
-
-    pub fn ord(&mut self) {
-        self.emit(Opcode::OrD);
-    }
-
-    pub fn xor(&mut self) {
-        self.emit(Opcode::Xor);
-    }
-
-    pub fn xord(&mut self) {
-        self.emit(Opcode::XorD);
-    }
-
-    pub fn not(&mut self) {
-        self.emit(Opcode::Not);
-    }
-
-    pub fn notd(&mut self) {
-        self.emit(Opcode::NotD);
-    }
-
-    pub fn cmp(&mut self) {
-        self.emit(Opcode::Cmp);
-    }
-
-    pub fn cmpd(&mut self) {
-        self.emit(Opcode::CmpD);
+    pub fn cmp<T: OpSized>(&mut self) {
+        self.emit_sized::<T>(Opcode::Cmp);
     }
 
     pub fn jmp(&mut self, cond: JmpCond, target: u64) {
         self.emit(Opcode::Jmp);
-        self.emit_byte(cond as u8);
-        self.emit_u64(target);
+        self.emit_const::<u8>(cond as u8);
+        self.emit_const::<u64>(target);
     }
 
     pub fn vmadd(&mut self) {
@@ -263,6 +310,11 @@ impl Assembler {
         self.emit(Opcode::VmSub);
     }
 
+    pub fn vmmul(&mut self) {
+        self.emit(Opcode::VmMul);
+    }
+
+
     pub fn vmctx(&mut self) {
         self.emit(Opcode::Vmctx);
     }
@@ -271,69 +323,54 @@ impl Assembler {
         self.emit(Opcode::Vmexit);
     }
 
+    fn emit_sized<T: OpSized>(&mut self, op: Opcode) {
+        self.program.push(op.into());
+        self.program.push(T::as_op_size().into());
+    }
+
     fn emit(&mut self, op: Opcode) {
-        self.program.push(op as u8);
+        self.program.push(op.into());
+        // testing size encoding on every instruction
+        self.program.push(u64::as_op_size().into());
     }
 
-    fn emit_byte(&mut self, byte: u8) {
-        self.program.push(byte);
-    }
-
-    fn emit_u32(&mut self, value: u32) {
-        self.program.extend_from_slice(&value.to_le_bytes());
-    }
-
-    fn emit_u64(&mut self, value: u64) {
+    fn emit_const<T: OpSized>(&mut self, value: T) {
         self.program.extend_from_slice(&value.to_le_bytes());
     }
 }
 
 pub fn disassemble(program: &[u8]) -> Result<String> {
-
     let mut s = String::new();
     let mut pc = program.as_ptr();
-    let mut index = 0;
 
     while pc < program.as_ptr_range().end {
-        let op = Opcode::try_from(unsafe { *pc }).unwrap();
-        pc = unsafe { pc.add(1) };
+        let instruction = unsafe { Instruction::from_ptr(pc) }.unwrap();
 
-        s.push_str(format!("{:x}: {:?}", pc.wrapping_sub(program.as_ptr() as usize) as usize - 1, op).as_str());
+        s.push_str(format!("{:x}: {:?}", pc.wrapping_sub(program.as_ptr() as usize) as usize, instruction.op_code).as_str());
 
         #[allow(clippy::single_match)]
-        match op {
+        match instruction.op_code {
             Opcode::Const => unsafe {
                 //let v = *(pc as *const u64);
-                let v = read_unaligned(pc as *const usize);
-                pc = pc.add(size_of::<u64>());
-                if let Ok(reg) = Register::try_from((v.wrapping_sub(16)) as u8 / 8) {
+                let value = instruction.value.unwrap();
+
+                if let Ok(reg) = Register::try_from((value.wrapping_sub(16)) as u8 / 8) {
                     s.push_str(format!(" {:?}", reg).as_str());
                 } else {
-                    s.push_str(format!(" {}", v).as_str());
-                }
-            },
-            Opcode::ConstD => unsafe {
-                //let v = *(pc as *const u64);
-                let v = read_unaligned(pc as *const u32);
-                pc = pc.add(size_of::<u32>());
-                if let Ok(reg) = Register::try_from((v.wrapping_sub(16 as u32)) as u8 / 8) {
-                    s.push_str(format!(" {:?}", reg).as_str());
-                } else {
-                    s.push_str(format!(" {}", v).as_str());
+                    s.push_str(format!(" {}", value).as_str());
                 }
             },
             Opcode::Jmp => unsafe {
-                let cond = JmpCond::try_from(read_unaligned(pc)).unwrap();
-                pc = pc.add(size_of::<u8>());
-                let val = read_unaligned(pc as *const u64);
-                pc = pc.add(size_of::<u64>());
-                s.push_str(format!(" {:?} 0x{:?}", cond, val).as_str());
+                let cond = JmpCond::try_from(read_unaligned(pc.add(2))).unwrap();
+                let val = instruction.value.unwrap();
+                s.push_str(format!(" {:?} 0x{:x}", cond, val).as_str());
             }
             _ => {}
         }
 
+        pc = unsafe { pc.add(instruction.length()) };
+
         s.push('\n');
-        index += 1;
     }
 
     Ok(s)
