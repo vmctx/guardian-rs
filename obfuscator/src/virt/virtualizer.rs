@@ -1,7 +1,6 @@
-use std::cmp::Ordering;
 use std::collections::HashMap;
 use crate::virt::machine::{Machine, Assembler, Register, JmpCond, OpSized, OpSize, HigherLower8Bit, RegUp};
-use iced_x86::{Decoder, Formatter, Instruction, Mnemonic, NasmFormatter, OpKind};
+use iced_x86::{Decoder, Formatter, Instruction, MemorySize, Mnemonic, NasmFormatter, OpKind};
 use memoffset::offset_of;
 
 trait Asm {
@@ -92,6 +91,10 @@ impl Virtualizer {
         let mut jmp_map = HashMap::<u64, usize>::new();
 
         for inst in decoder.iter() {
+            if inst.is_ip_rel_memory_operand() {
+                panic!("instruction relocation not supported yet");
+            }
+
             if jmp_map.contains_key(&inst.ip()) {
                 self.asm.patch(*jmp_map.get(&inst.ip()).unwrap() + 3, self.asm.len() as u64);
                 jmp_map.remove(&inst.ip()).unwrap();
@@ -490,14 +493,12 @@ impl Asm for Virtualizer {
             OpKind::Memory => {
                 self.lea_operand(inst);
 
-                // TODO i think the code below is incorrect
-                // since it has to know the target bits, not the source register
-                // use operand arg instead
-                match OpSize::try_from(inst.op0_register()).unwrap() {
-                    OpSize::Byte => panic!("unsupported load_mem size"),
-                    OpSize::Word => self.asm.load::<u16>(),
-                    OpSize::Dword => self.asm.load::<u32>(),
-                    OpSize::Qword => self.asm.load::<u64>()
+                match inst.memory_size() {
+                    MemorySize::Int8 | MemorySize::UInt8  => self.asm.load::<u8>(),
+                    MemorySize::Int16 | MemorySize::UInt16  => self.asm.load::<u16>(),
+                    MemorySize::Int32 | MemorySize::UInt32  => self.asm.load::<u32>(),
+                    MemorySize::Int64 | MemorySize::UInt64  => self.asm.load::<u64>(),
+                    _ => panic!("unsupported memory size")
                 }
             }
             // todo maybe use traits to restrict opkinds on some functions
@@ -520,6 +521,9 @@ impl Asm for Virtualizer {
             }
             OpKind::Immediate32to64 => {
                 self.const_(inst.immediate32to64() as u64)
+            },
+            OpKind::Immediate64 => {
+                self.const_(inst.immediate64())
             }
             _ => panic!("unsupported operand: {:?}", inst.op_kind(operand)),
         }
@@ -529,33 +533,15 @@ impl Asm for Virtualizer {
         match inst.op_kind(operand) {
             OpKind::Register => self.store_reg(inst.op_register(operand)),
             OpKind::Memory => {
-                assert_ne!(inst.op0_kind(), OpKind::Register);
                 self.lea_operand(inst);
 
-                /*
-                let mut operand_size = OpSize::try_from(inst.op1_register()).unwrap();
-
-                if inst.op_count() != 1 && inst.op0_kind().eq(&OpKind::Register) {
-                    println!("store reg, {:?}", inst.op0_register());
-                    // get lowest reg, if one reg is 32 bit get 32 bit etc
-                    let sec_reg_op_size = OpSize::from(inst.op0_register());
-                    match (sec_reg_op_size as u8).cmp(&(operand_size as u8)) {
-                        Ordering::Less => operand_size = sec_reg_op_size,
-                        Ordering::Equal => {}
-                        Ordering::Greater => {}
-                    }
-                }
-                 */
-
-                // todo should a mov [addr], 8 bit reg/32 bit
-                // TODO i think the code below is incorrect
-                // since it has to know the target bits, not the source register
-                // use operand arg instead
-                match OpSize::try_from(inst.op1_register()).unwrap() {
-                    OpSize::Byte => panic!("unsupported store_mem size"),
-                    OpSize::Word => self.asm.store::<u16>(),
-                    OpSize::Dword => self.asm.store::<u32>(),
-                    OpSize::Qword => self.asm.store::<u64>()
+                // this should be correct now, not a 100% sure
+                match inst.memory_size() {
+                    MemorySize::Int8 | MemorySize::UInt8  => self.asm.store::<u8>(),
+                    MemorySize::Int16 | MemorySize::UInt16  => self.asm.store::<u16>(),
+                    MemorySize::Int32 | MemorySize::UInt32  => self.asm.store::<u32>(),
+                    MemorySize::Int64 | MemorySize::UInt64  => self.asm.store::<u64>(),
+                    _ => panic!("unsupported memory size")
                 }
             }
             _ => panic!("unsupported operand"),
@@ -626,6 +612,9 @@ impl Asm for Virtualizer {
             }
         }
 
+        // todo idk if this works yet
+        // i need to probably support relocating instructions with relative
+        // addressing
         self.asm.const_(inst.memory_displacement64());
 
         if inst.memory_base() != iced_x86::Register::None

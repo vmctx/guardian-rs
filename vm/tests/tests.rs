@@ -34,6 +34,26 @@ mod tests {
         assert_eq!(f(0x1111222233334444), 0x1111222233337777);
     }
 
+
+    #[test]
+    #[cfg(target_env = "msvc")]
+    fn virtualize_variable_mutation() {
+        use iced_x86::code_asm::*;
+        let mut a = CodeAssembler::new(64).unwrap();
+        let mut test = 69;
+        a.lea(rax, qword_ptr(rax)).unwrap();
+        a.mov(rax, 19i64).unwrap();
+        a.mov(qword_ptr(rcx), 68).unwrap();
+        a.ret().unwrap();
+
+        let bytecode = virtualize(&a.assemble(0).unwrap());
+        let m = Machine::new(bytecode.as_ptr()).unwrap();
+        let f: extern "C" fn(&mut i32) -> i64 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        assert_eq!(f(&mut test), 19);
+        assert_eq!(test, 68);
+    }
+
+
     #[test]
     #[cfg(target_env = "msvc")]
     fn rax_and_ah_al() {
