@@ -5,19 +5,16 @@
 
 extern crate alloc;
 
+use alloc::alloc::dealloc;
 use alloc::vec;
-use alloc::vec::Vec;
+use core::alloc::Layout;
 use core::convert::TryFrom;
-use core::hint::black_box;
+use core::mem::forget;
 use core::mem::size_of;
 use core::ops::{BitAnd, BitOr, BitXor, Not};
-use core::ptr::{read_unaligned, write_unaligned};
-use core::ptr::{drop_in_place, addr_of_mut};
-use core::mem::forget;
+use core::ptr::read_unaligned;
 
 use x86::bits64::rflags::RFlags;
-
-use crate::vm::vmexit;
 
 #[cfg(not(feature = "testing"))]
 #[panic_handler]
@@ -33,6 +30,7 @@ mod handlers;
 const VM_STACK_SIZE: usize = 0x1000;
 const CPU_STACK_SIZE: usize = 0x1000;
 
+#[cfg(not(feature = "testing"))]
 mod vm;
 mod syscalls;
 #[allow(dead_code)]
@@ -197,33 +195,35 @@ pub struct Machine {
     sp: *mut u64,
     regs: [u64; 16],
     rflags: u64,
-    vmstack: Vec<u64>,
+    vmstack: *mut u64,
     #[cfg(not(feature = "testing"))]
     cpustack: *mut u8,
     #[cfg(feature = "testing")]
-    cpustack: Vec<u8>,
+    cpustack: alloc::vec::Vec<u8>,
     #[cfg(feature = "testing")]
     pub vmenter: region::Allocation,
 }
 
 // check why anything bigger than this causes issues with my example program
 #[cfg(not(feature = "testing"))]
-static_assertions::const_assert_eq!(core::mem::size_of::<Machine>(), 0xb8);
+static_assertions::const_assert_eq!(core::mem::size_of::<Machine>(), 0xa8);
 
 impl Machine {
     #[no_mangle]
     pub unsafe extern "C" fn new_vm(out: *mut Self) {
         #[cfg(not(feature = "testing"))] {
             let mut cpustack = vec![0u8; CPU_STACK_SIZE];
+            let mut vmstack = vec![0u64; VM_STACK_SIZE];
             *out = Self {
                 pc: core::ptr::null(),
                 sp: core::ptr::null_mut(),
                 regs: [0; 16],
                 rflags: 0,
-                vmstack: vec![0u64; VM_STACK_SIZE],
+                vmstack: vmstack.as_mut_ptr(),
                 cpustack: cpustack.as_mut_ptr(),
             };
             forget(cpustack);
+            forget(vmstack);
         }
     }
 
@@ -232,15 +232,19 @@ impl Machine {
     pub fn new(program: *const u8) -> anyhow::Result<Self> {
         use iced_x86::code_asm::*;
 
+        let mut vmstack = vec![0u64; VM_STACK_SIZE];
+
         let mut m = Self {
             pc: core::ptr::null(),
             sp: core::ptr::null_mut(),
             regs: [0; 16],
             rflags: 0,
-            vmstack: vec![0u64; VM_STACK_SIZE],
+            vmstack: vmstack.as_mut_ptr(),
             cpustack: vec![0u8; CPU_STACK_SIZE],
             vmenter: region::alloc(region::page::size(), region::Protection::READ_WRITE_EXECUTE)?,
         };
+
+        forget(vmstack);
 
         // Generate VMENTER.
         let regmap: &[(&AsmRegister64, u8)] = &[
@@ -339,7 +343,7 @@ impl Machine {
     unsafe fn stack_push<T: Sized>(&mut self, value: T) {
         assert_eq!(size_of::<T>() % 2, 0);
         // stack overflow
-        assert_ne!(self.sp, self.vmstack.as_mut_ptr());
+        assert_ne!(self.sp, self.vmstack);
         self.sp = self.sp.cast::<T>().sub(1) as _;
         self.sp.cast::<T>().write_unaligned(value);
     }
@@ -357,8 +361,8 @@ impl Machine {
     #[no_mangle]
     pub unsafe extern "C" fn run(&mut self, program: *const u8) -> &mut Self {
         self.pc = program;
-        self.sp = self.vmstack.as_mut_ptr()
-            .add((self.vmstack.len() - 0x100 - size_of::<u64>()) / size_of::<*mut u64>());
+        self.sp = self.vmstack
+            .add((VM_STACK_SIZE - 0x100 - size_of::<u64>()) / size_of::<*mut u64>());
 
         // todo recode flags to calculate instead, cuz it can cause ub when
         // compilation doesnt do it the way i want
@@ -421,17 +425,28 @@ impl Machine {
             }
         }
 
-        // in tests it gets deallocated properly
-        #[cfg(not(feature = "testing"))] {
-            drop_in_place(addr_of_mut!((*self).vmstack));
-        }
-
         self
+    }
+
+    #[no_mangle]
+    #[cfg(not(feature = "testing"))]
+    pub extern "C" fn dealloc(&mut self, stack_ptr: *mut u8) {
+        #[cfg(not(feature = "testing"))]
+        unsafe { dealloc(self.vmstack as _, Layout::new::<[u64; VM_STACK_SIZE]>()) }
+        #[cfg(not(feature = "testing"))]
+        unsafe { dealloc(stack_ptr, Layout::new::<[u8; CPU_STACK_SIZE]>()) }
     }
 
     #[inline(always)]
     pub fn set_rflags(&mut self) {
         self.rflags = x86::bits64::rflags::read().bits();
+    }
+}
+
+#[cfg(feature = "testing")]
+impl Drop for Machine {
+    fn drop(&mut self) {
+        unsafe { dealloc(self.vmstack as _, Layout::new::<[u64; VM_STACK_SIZE]>()) }
     }
 }
 

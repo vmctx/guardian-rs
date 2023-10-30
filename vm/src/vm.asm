@@ -99,13 +99,24 @@ vmenter:
     jmp vmexit
 
 vmexit:
+    mov rdx, rsp
+    sub rdx, {cpustack_offset}
+    // restore old stack
+    mov rsp, [rcx + {rsp}]
+    // preserve self ptr
+    push rcx
+    // dealloc cpu and vmstack
+    call dealloc
+    // restore self ptr
+    pop rcx
+    // restore rflags
     mov rax, [rcx + {rflags}]
     push rax
     popfq
+    // restore gpr
     mov rax, [rcx + {rax}]
     mov rdx, [rcx + {rdx}]
     // mov rbx, [rcx + {rbx}] // non vol
-    mov rsp, [rcx + {rsp}] // restore old stack
     // mov rbp, [rcx + {rbp}] // non vol
     // mov rsi, [rcx + {rsi}] // non vol
     // mov rdi, [rcx + {rdi}] // non vol
