@@ -174,12 +174,14 @@ mod tests {
     fn virtualize_push_pop() {
         use iced_x86::code_asm::*;
         let mut a = CodeAssembler::new(64).unwrap();
-        a.push(rcx).unwrap();
-        a.pop(rax).unwrap();
+        a.push(69i32).unwrap();
+        a.mov(rax, rcx).unwrap();
+        a.pop(rcx).unwrap();
+        a.add(rax, rcx).unwrap();
         a.ret().unwrap();
         let bytecode = virtualize(&a.assemble(0).unwrap());
         let m = Machine::new(bytecode.as_ptr()).unwrap();
         let f: extern "C" fn(i32) -> i8 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
-        assert_eq!(f(-8), -8);
+        assert_eq!(f(-8), 61);
     }
 }

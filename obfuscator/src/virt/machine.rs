@@ -1,5 +1,7 @@
 use anyhow::Result;
 use std::ptr::read_unaligned;
+use iced_x86::{MemorySize, OpKind};
+use num_enum::TryFromPrimitiveError;
 
 #[repr(C)]
 pub struct Machine {
@@ -85,6 +87,39 @@ impl From<iced_x86::Register> for OpSize {
             OpSize::Dword
         } else {
             OpSize::Qword
+        }
+    }
+}
+
+impl TryFrom<MemorySize> for OpSize {
+    type Error = TryFromPrimitiveError<OpSize>;
+
+    fn try_from(size: MemorySize) -> std::result::Result<Self, Self::Error> {
+        Self::try_from(size.size() as u8)
+    }
+}
+
+impl TryFrom<&iced_x86::Instruction> for OpSize {
+    type Error = TryFromPrimitiveError<OpSize>;
+
+    fn try_from(inst: &iced_x86::Instruction) -> std::result::Result<Self, Self::Error> {
+        if inst.memory_size() != MemorySize::Unknown {
+            Self::try_from(inst.memory_size())
+        } else if inst.op0_register() != iced_x86::Register::None {
+            Self::try_from(inst.op0_register().size() as u8)
+        } else {
+            let value = match inst.op0_kind() {
+                OpKind::Immediate8 => OpSize::Byte,
+                OpKind::Immediate8to16 => OpSize::Word,
+                OpKind::Immediate16 => OpSize::Word,
+                OpKind::Immediate8to32 => OpSize::Dword,
+                OpKind::Immediate32 => OpSize::Dword,
+                OpKind::Immediate8to64 => OpSize::Qword,
+                OpKind::Immediate32to64 => OpSize::Qword,
+                OpKind::Immediate64 => OpSize::Qword,
+                _=> panic!("invalid immediate?")
+            };
+            Ok(value)
         }
     }
 }
@@ -448,6 +483,12 @@ pub fn disassemble(program: &[u8]) -> Result<String> {
         let instruction = unsafe { Instruction::from_ptr(pc) }.unwrap();
 
         s.push_str(format!("{:x}: {:?}", pc.wrapping_sub(program.as_ptr() as usize) as usize, instruction.op_code).as_str());
+        match instruction.op_size {
+            OpSize::Byte => s.push('B'),
+            OpSize::Word => s.push('W'),
+            OpSize::Dword => s.push('D'),
+            OpSize::Qword => s.push('Q'),
+        }
 
         #[allow(clippy::single_match)]
         match instruction.op_code {

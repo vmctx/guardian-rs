@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use crate::virt::machine::{Machine, Assembler, Register, JmpCond, OpSized, OpSize, HigherLower8Bit, RegUp};
-use iced_x86::{Decoder, Formatter, Instruction, MemorySize, Mnemonic, NasmFormatter, OpKind};
+use iced_x86::{Decoder, Formatter, Instruction, Mnemonic, NasmFormatter, OpKind};
 use memoffset::offset_of;
 
 trait Asm {
@@ -58,15 +58,33 @@ macro_rules! vmasm {(
 })}
 
 macro_rules! binary_op {
-    ($self:ident, $inst:ident, $op:ident $(::<$($T:ty),*>)?) => {{
+    ($self:ident, $inst:ident, $op:ident) => {{
         assert_eq!($inst.op_count(), 2);
 
         vmasm!($self,
             load_operand, $inst, 0;
             load_operand, $inst, 1;
-            $op$(::<$($T),*>)?;
+        );
+        match OpSize::try_from($inst).unwrap() {
+            OpSize::Byte => vmasm!($self, $op::<u8>;),
+            OpSize::Word => vmasm!($self, $op::<u16>;),
+            OpSize::Dword => vmasm!($self, $op::<u32>;),
+            OpSize::Qword => vmasm!($self, $op::<u64>;)
+        }
+        vmasm!($self,
             store_operand, $inst, 0;
         );
+    }}
+}
+
+macro_rules! sized_op {
+    ($self:ident, $inst:ident, $op:ident) => {{
+        match OpSize::try_from($inst).unwrap() {
+            OpSize::Byte => vmasm!($self, $op::<u8>;),
+            OpSize::Word => vmasm!($self, $op::<u16>;),
+            OpSize::Dword => vmasm!($self, $op::<u32>;),
+            OpSize::Qword => vmasm!($self, $op::<u64>;)
+        }
     }}
 }
 
@@ -164,13 +182,6 @@ impl Virtualizer {
     }
 
     fn mov(&mut self, inst: &Instruction) {
-        // todo add virtual instructions to bit shift left and right
-        // then when virtaulizing those higher-8bit registers, just emit shift instructions appropriately so your normal add/sub/etc instructions work as expected
-        // so mov ah, someething
-        // would be shift lower 8 bit to higher 8 bit, do mov, shift back
-        // ALSO !!
-        // todo remember that it writing to 16 and 8 bit registers doesn't clear the other bits in a register like writing to 32-bit
-        // so when you shift back you need to mask and and the existing value of the register correctly
         vmasm!(self,
             load_operand, inst, 1;
             store_operand, inst, 0;
@@ -188,23 +199,11 @@ impl Virtualizer {
     // todo
     // https://blog.back.engineering/17/05/2021/#ADD
     fn add(&mut self, inst: &Instruction) {
-        match OpSize::try_from(inst.op0_register()).unwrap() {
-            OpSize::Byte => panic!("unsupported operand size"),
-            OpSize::Word => binary_op!(self, inst, add::<u16>),
-            OpSize::Dword => binary_op!(self, inst, add::<u32>),
-            OpSize::Qword => binary_op!(self, inst, add::<u64>)
-        }
+        binary_op!(self, inst, add)
     }
 
-    // todo implement all of this for push and load too, probably
-    // https://blog.back.engineering/17/05/2021/#PUSHVSP
     fn sub(&mut self, inst: &Instruction) {
-        match OpSize::try_from(inst.op0_register()).unwrap() {
-            OpSize::Byte => panic!("unsupported operand size"),
-            OpSize::Word => binary_op!(self, inst, sub::<u16>),
-            OpSize::Dword => binary_op!(self, inst, sub::<u32>),
-            OpSize::Qword => binary_op!(self, inst, sub::<u64>)
-        }
+        binary_op!(self, inst, sub)
     }
 
     // todo store remainder, use correct regs
@@ -274,13 +273,12 @@ impl Virtualizer {
         for _ in 0..inst.immediate8() {
             vmasm!(self,
                 load_operand, inst, 0;
-                const_::<u64>, 2u64; // todo is tis correct
             );
             match OpSize::try_from(inst.op0_register()).unwrap() {
-                OpSize::Byte => panic!("unsupported operand size"),
-                OpSize::Word => vmasm!(self, div::<u16>;),
-                OpSize::Dword => vmasm!(self, div::<u32>;),
-                OpSize::Qword => vmasm!(self, div::<u64>;),
+                OpSize::Byte => vmasm!(self, const_::<u8>, 2; div::<u8>;),
+                OpSize::Word => vmasm!(self, const_::<u16>, 2; div::<u16>;),
+                OpSize::Dword => vmasm!(self, const_::<u32>, 2; div::<u32>;),
+                OpSize::Qword => vmasm!(self, const_::<u64>, 2; div::<u64>;),
             }
             vmasm!(self,
                 store_operand, inst, 0;
@@ -289,55 +287,25 @@ impl Virtualizer {
     }
 
     fn mul(&mut self, inst: &Instruction) {
-        match OpSize::try_from(inst.op0_register()).unwrap() {
-            OpSize::Byte => panic!("unsupported operand size"),
-            OpSize::Word => binary_op!(self, inst, mul::<u16>),
-            OpSize::Dword => binary_op!(self, inst, mul::<u32>),
-            OpSize::Qword => binary_op!(self, inst, mul::<u64>)
-        }
+        binary_op!(self, inst, mul)
     }
 
     fn and(&mut self, inst: &Instruction) {
-        match OpSize::try_from(inst.op0_register()).unwrap() {
-            OpSize::Byte => panic!("unsupported operand size"),
-            OpSize::Word => binary_op!(self, inst, and::<u16>),
-            OpSize::Dword => binary_op!(self, inst, and::<u32>),
-            OpSize::Qword => binary_op!(self, inst, and::<u64>)
-        }
+        binary_op!(self, inst, and)
     }
 
     fn or(&mut self, inst: &Instruction) {
-        match OpSize::try_from(inst.op0_register()).unwrap() {
-            OpSize::Byte => panic!("unsupported operand size"),
-            OpSize::Word => binary_op!(self, inst, or::<u16>),
-            OpSize::Dword => binary_op!(self, inst, or::<u32>),
-            OpSize::Qword => binary_op!(self, inst, or::<u64>)
-        }
+        binary_op!(self, inst, or)
     }
 
     fn xor(&mut self, inst: &Instruction) {
-        // todo move all this match statement into the macro
-        match OpSize::try_from(inst.op0_register()).unwrap() {
-            OpSize::Byte => binary_op!(self, inst, xor::<u8>),
-            OpSize::Word => binary_op!(self, inst, xor::<u16>),
-            OpSize::Dword => binary_op!(self, inst, xor::<u32>),
-            OpSize::Qword => binary_op!(self, inst, xor::<u64>)
-        }
+        binary_op!(self, inst, xor)
     }
 
     fn not(&mut self, inst: &Instruction) {
-        vmasm!(self,
-            load_operand, inst, 0;
-        );
-        match OpSize::try_from(inst.op0_register()).unwrap() {
-            OpSize::Byte => panic!("unsupported operand size"),
-            OpSize::Word => vmasm!(self, not::<u16>;),
-            OpSize::Dword => vmasm!(self, not::<u32>;),
-            OpSize::Qword => vmasm!(self, not::<u64>;),
-        }
-        vmasm!(self,
-            store_operand, inst, 0;
-        );
+        vmasm!(self,load_operand, inst, 0;);
+        sized_op!(self, inst, not);
+        vmasm!(self,store_operand, inst, 0;);
     }
 
     fn cmp(&mut self, inst: &Instruction) {
@@ -345,13 +313,7 @@ impl Virtualizer {
             load_operand, inst, 0;
             load_operand, inst, 1;
         );
-
-        match OpSize::try_from(inst.op0_register()).unwrap() {
-            OpSize::Byte => panic!("unsupported operand size"),
-            OpSize::Word => vmasm!(self, cmp::<u16>;),
-            OpSize::Dword => vmasm!(self, cmp::<u32>;),
-            OpSize::Qword => vmasm!(self, cmp::<u64>;),
-        }
+        sized_op!(self, inst, cmp);
     }
 
     // seems to be correct
@@ -382,9 +344,6 @@ impl Virtualizer {
     }
 
     fn push(&mut self, inst: &Instruction) {
-        // do this for now
-        assert_eq!(inst.op0_kind(), OpKind::Register);
-
         use iced_x86::Register::RSP;
 
         vmasm!(self,
@@ -395,19 +354,18 @@ impl Virtualizer {
 
             load_operand, inst, 0;
             load_reg, RSP;
-            store::<u64>;
         );
+        sized_op!(self, inst, store);
     }
 
     fn pop(&mut self, inst: &Instruction) {
-        // do this for now
-        assert_eq!(inst.op0_kind(), OpKind::Register);
-
         use iced_x86::Register::RSP;
 
         vmasm!(self,
             load_reg, RSP;
-            load::<u64>;
+        );
+        sized_op!(self, inst, load);
+        vmasm!(self,
             store_operand, inst, 0;
 
             load_reg, RSP;
@@ -492,39 +450,16 @@ impl Asm for Virtualizer {
             OpKind::Register => self.load_reg(inst.op_register(operand)),
             OpKind::Memory => {
                 self.lea_operand(inst);
-
-                match inst.memory_size() {
-                    MemorySize::Int8 | MemorySize::UInt8  => self.asm.load::<u8>(),
-                    MemorySize::Int16 | MemorySize::UInt16  => self.asm.load::<u16>(),
-                    MemorySize::Int32 | MemorySize::UInt32  => self.asm.load::<u32>(),
-                    MemorySize::Int64 | MemorySize::UInt64  => self.asm.load::<u64>(),
-                    _ => panic!("unsupported memory size")
-                }
+                sized_op!(self, inst, load);
             }
-            // todo maybe use traits to restrict opkinds on some functions
-            // like div which can only have register and memory
-            // sub can have immediates as example
-            OpKind::Immediate16 => {
-                self.const_(inst.immediate16())
-            }
-            OpKind::Immediate8to16 => {
-                self.const_(inst.immediate8to16() as u64)
-            }
-            OpKind::Immediate8to32 => {
-                self.const_(inst.immediate8to32() as u32)
-            }
-            OpKind::Immediate32 => {
-                self.const_(inst.immediate32())
-            }
-            OpKind::Immediate8to64 => {
-                self.const_(inst.immediate8to64() as u64)
-            }
-            OpKind::Immediate32to64 => {
-                self.const_(inst.immediate32to64() as u64)
-            },
-            OpKind::Immediate64 => {
-                self.const_(inst.immediate64())
-            }
+            OpKind::Immediate8 => self.const_(inst.immediate8()),
+            OpKind::Immediate8to16 => self.const_(inst.immediate8to16() as u16),
+            OpKind::Immediate16 => self.const_(inst.immediate16()),
+            OpKind::Immediate8to32 => self.const_(inst.immediate8to32() as u32),
+            OpKind::Immediate32 => self.const_(inst.immediate32()),
+            OpKind::Immediate8to64 => self.const_(inst.immediate8to64() as u64),
+            OpKind::Immediate32to64 => self.const_(inst.immediate32to64() as u64),
+            OpKind::Immediate64 => self.const_(inst.immediate64()),
             _ => panic!("unsupported operand: {:?}", inst.op_kind(operand)),
         }
     }
@@ -534,15 +469,7 @@ impl Asm for Virtualizer {
             OpKind::Register => self.store_reg(inst.op_register(operand)),
             OpKind::Memory => {
                 self.lea_operand(inst);
-
-                // this should be correct now, not a 100% sure
-                match inst.memory_size() {
-                    MemorySize::Int8 | MemorySize::UInt8  => self.asm.store::<u8>(),
-                    MemorySize::Int16 | MemorySize::UInt16  => self.asm.store::<u16>(),
-                    MemorySize::Int32 | MemorySize::UInt32  => self.asm.store::<u32>(),
-                    MemorySize::Int64 | MemorySize::UInt64  => self.asm.store::<u64>(),
-                    _ => panic!("unsupported memory size")
-                }
+                sized_op!(self, inst, store);
             }
             _ => panic!("unsupported operand"),
         }
@@ -556,11 +483,12 @@ impl Asm for Virtualizer {
             .const_(offset_of!(Machine, regs) as u64 + reg_offset);
         self.asm.vmadd();
 
-        let operand_size = OpSize::try_from(reg).unwrap();
+        let operand_size = OpSize::try_from(reg.size() as u8).unwrap();
 
         match operand_size {
             OpSize::Byte => if reg.is_higher_8_bit() {
-                self.asm.load::<u16>(); // load 8 is same as 16 bit anyways it will get truncated
+                // load 8 is same as 16 bit anyways it will get truncated
+                self.asm.load::<u16>();
                 // shift higher bits to lower on stack
                 self.asm.rot_right();
             } else {
@@ -580,7 +508,7 @@ impl Asm for Virtualizer {
             .const_(offset_of!(Machine, regs) as u64 + reg_offset);
         self.asm.vmadd();
 
-        let operand_size = OpSize::try_from(reg).unwrap();
+        let operand_size = OpSize::try_from(reg.size() as u8).unwrap();
 
         match operand_size {
             OpSize::Byte => if reg.is_higher_8_bit() {
@@ -612,9 +540,6 @@ impl Asm for Virtualizer {
             }
         }
 
-        // todo idk if this works yet
-        // i need to probably support relocating instructions with relative
-        // addressing
         self.asm.const_(inst.memory_displacement64());
 
         if inst.memory_base() != iced_x86::Register::None
