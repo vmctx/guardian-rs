@@ -11,7 +11,7 @@ use core::alloc::Layout;
 use core::convert::TryFrom;
 use core::mem::forget;
 use core::mem::size_of;
-use core::ops::{BitAnd, BitOr, BitXor, Not};
+use core::ops::BitXor;
 use core::ptr::read_unaligned;
 
 use x86::bits64::rflags::RFlags;
@@ -398,8 +398,8 @@ impl Machine {
                         JmpCond::Jne => !rflags.contains(RFlags::FLAGS_ZF),
                         JmpCond::Jbe => rflags.contains(RFlags::FLAGS_ZF)
                             || rflags.contains(RFlags::FLAGS_CF),
-                        JmpCond::Ja => (!rflags.contains(RFlags::FLAGS_ZF)
-                            && !rflags.contains(RFlags::FLAGS_CF)),
+                        JmpCond::Ja => !rflags.contains(RFlags::FLAGS_ZF)
+                            && !rflags.contains(RFlags::FLAGS_CF),
                         JmpCond::Jle => rflags.contains(RFlags::FLAGS_SF).bitxor(rflags.contains(RFlags::FLAGS_OF))
                             || rflags.contains(RFlags::FLAGS_ZF),
                         JmpCond::Jg => rflags.contains(RFlags::FLAGS_SF) == rflags.contains(RFlags::FLAGS_OF) && !rflags.contains(RFlags::FLAGS_ZF)

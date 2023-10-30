@@ -1,6 +1,5 @@
 use core::alloc::{GlobalAlloc, Layout};
 use winapi::ctypes::c_void;
-use crate::allocator;
 
 pub struct Allocator;
 

@@ -3,7 +3,7 @@ target = "x86_64-pc-windows-msvc"
 # target = "i686-pc-windows-msvc"
 
 rustflags = [
-    "-Z",  "location-detail=none",
+    "-Z", "location-detail=none",
     "-C", "link-arg=/MAP:target/x86_64-pc-windows-msvc/release/vm.map",
     # Pre Link Args
     #"-Z", "pre-link-arg=/NOLOGO",
@@ -27,7 +27,3 @@ rustflags = [
     "-Clink-arg=/MAP:target/x86_64-pc-windows-msvc/release/vm.map"
 ]
 
-
-# reduces binary size by 4kb
-[unstable]
-build-std = ["core", "std", "alloc"]
