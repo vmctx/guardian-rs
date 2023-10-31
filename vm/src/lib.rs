@@ -47,7 +47,9 @@ mod allocator;
 pub enum Opcode {
     Const,
     Load,
+    // only diff is that 32 bit doesnt cast as 64 bit ptr
     Store,
+    StoreReg,
     Add,
     Sub,
     Div,
@@ -379,6 +381,7 @@ impl Machine {
                 Opcode::Const => handlers::r#const::r#const(self, op_size),
                 Opcode::Load => handlers::load::load(self, op_size),
                 Opcode::Store => handlers::store::store(self, op_size),
+                Opcode::StoreReg => handlers::store::store_reg(self, op_size),
                 Opcode::Div => handlers::div::div(self, op_size), // unfinished
                 Opcode::Mul => handlers::mul::mul(self, op_size),
                 Opcode::Add => handlers::add::add(self, op_size),

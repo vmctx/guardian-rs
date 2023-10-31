@@ -27,7 +27,9 @@ pub enum OpSize {
 pub enum Opcode {
     Const,
     Load,
+    // only diff is that 32 bit doesnt cast as 64 bit ptr
     Store,
+    StoreReg,
     Add,
     Sub,
     Div,
@@ -387,6 +389,10 @@ impl Assembler {
 
     pub fn store<T: OpSized>(&mut self) {
         self.emit_sized::<T>(Opcode::Store);
+    }
+
+    pub fn store_reg<T: OpSized>(&mut self) {
+        self.emit_sized::<T>(Opcode::StoreReg);
     }
 
     pub fn add<T: OpSized>(&mut self) {

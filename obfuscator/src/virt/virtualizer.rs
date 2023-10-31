@@ -509,16 +509,16 @@ impl Asm for Virtualizer {
 
         match operand_size {
             OpSize::Byte => if reg.is_higher_8_bit() {
-                self.asm.store::<u8>();
+                self.asm.store_reg::<u8>();
                 self.load_reg(reg.get_gpr_16());
                 self.asm.rot_left();
                 self.store_reg(reg.get_gpr_16());
             } else {
-                self.asm.store::<u8>()
+                self.asm.store_reg::<u8>()
             },
-            OpSize::Word => self.asm.store::<u16>(),
-            OpSize::Dword => self.asm.store::<u32>(),
-            OpSize::Qword => self.asm.store::<u64>()
+            OpSize::Word => self.asm.store_reg::<u16>(),
+            OpSize::Dword => self.asm.store_reg::<u32>(),
+            OpSize::Qword => self.asm.store_reg::<u64>()
         }
     }
 
