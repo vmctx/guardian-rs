@@ -13,6 +13,7 @@ mod virt;
 fn main() {
    virtualize_file(
       "../hello_world/target/release/hello_world.exe",
+      "../hello_world/target/release/hello_world.map",
       "../hello_world/target/release/hello_world_modded.exe",
       vec!["hello_world::calc".to_string()]
    )

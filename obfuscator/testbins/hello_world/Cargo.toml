@@ -1,0 +1,13 @@
+[package]
+name = "hello_world"
+version = "0.1.0"
+edition = "2021"
+build = "../build.rs"
+
+[workspace]
+
+[dependencies]
+
+[profile.release]
+strip = false
+debug = true

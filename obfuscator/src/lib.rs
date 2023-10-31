@@ -13,8 +13,8 @@ pub mod virt;
 pub mod diassembler;
 pub mod pe;
 
-pub fn virtualize_file(path: &str, path_out: &str, functions: Vec<String>) {
-    let map_data = std::fs::read(path.replace(".exe", ".map")).unwrap();
+pub fn virtualize_file(path: &str, map_path: &str, path_out: &str, functions: Vec<String>) {
+    let map_data = std::fs::read(map_path).unwrap();
     let map_string = String::from_utf8(map_data).unwrap();
     let mut map_file = MapFile::load(&map_string).unwrap();
 
@@ -38,7 +38,8 @@ pub fn virtualize_file(path: &str, path_out: &str, functions: Vec<String>) {
 
     let bytecode_section = add_section(&mut pefile, &bytecode_section, &bytecode).unwrap();
 
-    let mut vm_file = VecPE::from_disk_file("target/x86_64-pc-windows-msvc/release/vm.dll").unwrap();
+    // todo include
+    let mut vm_file = VecPE::from_disk_file("../target/x86_64-pc-windows-msvc/release/vm.dll").unwrap();
     let vm_file_text = vm_file.get_section_by_name(".text").unwrap().clone();
     let machine_entry = vm_file.get_entrypoint().unwrap();
     println!("vm machine::new: {:x}", machine_entry.0);
@@ -116,6 +117,7 @@ fn patch_function(pefile: &mut VecPE, target_fn: usize, target_fn_size: usize, v
         }
      */
     let mut a = CodeAssembler::new(64).unwrap();
+    a.push(bytecode_rva as i32).unwrap();
     a.jmp(vm_rva as u64 - target_fn as u64).unwrap();
 
     let patch = a.assemble(0).unwrap();
