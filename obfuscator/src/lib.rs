@@ -16,10 +16,7 @@ pub mod pe;
 pub fn virtualize_file(path: &str, map_path: &str, path_out: &str, functions: Vec<String>) {
     let map_data = std::fs::read(map_path).unwrap();
     let map_string = String::from_utf8(map_data).unwrap();
-    let mut map_file = MapFile::load(&map_string).unwrap();
-
-    let (function, function_size) = map_file.get_function("hello_world::calc").unwrap();
-    println!("target function: {}: {:x}", function.symbol, function_size);
+    let map_file = MapFile::load(&map_string).unwrap();
 
     let mut pefile = VecPE::from_disk_file(path).unwrap();
 
@@ -83,6 +80,7 @@ fn virtualize_functions(pefile: &VecPE, map_file: MapFile, functions: &[String])
     let mut virtualized_fns = Vec::new();
 
     for function in functions {
+        println!("searching {}", function);
         let (function, function_size) = map_file.get_function(function).unwrap();
         println!("found target function: {}: {:x}:{}", function.symbol, function.rva.0, function_size);
         let target_fn_addr = pefile.rva_to_offset(RVA(function.rva.0 as _)).unwrap().0 as _;
@@ -96,6 +94,7 @@ fn virtualize_functions(pefile: &VecPE, map_file: MapFile, functions: &[String])
             target_function,
         );
         println!("{}", disassemble(&virtualized_function).unwrap());
+        println!("{:x?}", virtualized_function);
         virtualized_fns.push(VirtualizedFn {
             rva: function.rva.0,
             size: function_size,

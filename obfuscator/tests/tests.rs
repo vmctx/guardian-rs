@@ -26,6 +26,25 @@ fn binary_hello_world() {
     assert!(exit_status.success());
 }
 
+#[test]
+fn binary_two_functions() {
+    // build and test normal binary
+    let (output, exit_status) = build_and_run("two_functions");
+
+    assert!(exit_status.success());
+    assert_eq!(output, "hi -35\nhi -620\n");
+
+    // test virtualized binary
+    let (output, exit_status) = virtualize_and_run(
+        "two_functions",
+        vec!["two_functions::calc".to_owned(), "two_functions::calc_2".to_owned()]
+    );
+
+    assert!(exit_status.success());
+    assert_eq!(output, "hi -35\nhi -620\n");
+}
+
+
 fn virtualize_and_run(binary_name: &str, functions: Vec<String>) -> (String, ExitStatus) {
     obfuscator::virtualize_file(
         format!("testbins\\{binary_name}\\target\\release\\{binary_name}.exe").as_str(),

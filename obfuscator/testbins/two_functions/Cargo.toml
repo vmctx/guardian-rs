@@ -1,0 +1,14 @@
+[package]
+name = "two_functions"
+version = "0.1.0"
+edition = "2021"
+build = "../build.rs"
+
+[workspace]
+
+[dependencies]
+
+[profile.release]
+opt-level = 2
+strip = false
+debug = true

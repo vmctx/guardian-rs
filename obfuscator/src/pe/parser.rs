@@ -448,6 +448,20 @@ impl MapFile {
         let mut found_function = None;
         let mut size = 0;
 
+        for function in &self.functions {
+            if function.flags.contains(&"f".to_string()) && function.symbol.eq(function_name) {
+                found_function = Some(Function {
+                    symbol: function.symbol.clone(),
+                    addr: function.addr.clone(),
+                    rva: function.rva.clone(),
+                    flags: function.flags.clone(),
+                    libobj: function.libobj.clone(),
+                });
+                break;
+            }
+
+        }
+
         for function in &self.static_symbols {
             if function.flags.contains(&"f".to_string()) && function.symbol.eq(function_name) {
                 found_function = Some(Function {

@@ -10,7 +10,6 @@ const EXAMPLE_CODE_RIP: u64 = 140001000;
 
 impl Disassembler {
     pub fn from_bytes(bytes: Vec<u8>) -> Self {
-        // TODO detect bitness only allow x64 for now
         Self { bytes }
     }
 

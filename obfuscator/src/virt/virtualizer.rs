@@ -142,8 +142,6 @@ impl Virtualizer {
                 Mnemonic::Ret => self.ret(),
                 Mnemonic::Push => self.push(&inst),
                 Mnemonic::Pop => self.pop(&inst),
-                // todo need to add jne, jb etc now (mostly same as jmp but with rflag checks)
-                // and extensively test jmp to work in real world example
                 Mnemonic::Jmp | Mnemonic::Je | Mnemonic::Jne | Mnemonic::Jbe
                 | Mnemonic::Ja | Mnemonic::Jle | Mnemonic::Jg => {
                     if !inst.is_jcc_short() && !inst.is_jmp_short() {
@@ -196,7 +194,6 @@ impl Virtualizer {
         );
     }
 
-    // todo
     // https://blog.back.engineering/17/05/2021/#ADD
     fn add(&mut self, inst: &Instruction) {
         binary_op!(self, inst, add)
