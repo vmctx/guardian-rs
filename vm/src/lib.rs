@@ -130,7 +130,6 @@ macro_rules! binary_op_save_flags {
 
         $self.set_rflags();
 
-
         if core::mem::size_of::<$bit>() == 1 {
             unsafe { $self.stack_push(result as u16); }
         } else {

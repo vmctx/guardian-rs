@@ -97,9 +97,6 @@ mod tests {
     #[test]
     #[cfg(target_env = "msvc")]
     fn virtualize_jmp_lbl() {
-        // todo this might not work properly in release
-        // because rflags is kinda ub, i cant predict the compiler
-        // generates the correct code 100% of the time
         use iced_x86::code_asm::*;
         let mut a = CodeAssembler::new(64).unwrap();
         let mut lbl = a.create_label();
