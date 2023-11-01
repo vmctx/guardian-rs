@@ -10,7 +10,7 @@ doctest = false
 [dependencies]
 #clap = "4.3.19"
 # virtualizer
-anyhow = {workspace = true, default-features = true }
+anyhow = { workspace = true, default-features = true }
 num_enum.workspace = true
 memoffset.workspace = true
 x86.workspace = true

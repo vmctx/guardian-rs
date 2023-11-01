@@ -419,12 +419,8 @@ impl Machine {
                 Opcode::VmAdd => binary_op!(self, wrapping_add),
                 Opcode::VmSub => binary_op!(self, wrapping_sub),
                 Opcode::VmMul => binary_op!(self, wrapping_mul),
-                Opcode::Vmctx => {
-                    self.stack_push(self as *const _ as u64);
-                }
-                Opcode::Vmexit => {
-                    break;
-                }
+                Opcode::Vmctx => self.stack_push(self as *const _ as u64),
+                Opcode::Vmexit => break
             }
         }
 
