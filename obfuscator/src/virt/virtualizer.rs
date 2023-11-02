@@ -109,7 +109,12 @@ impl Virtualizer {
         let mut jmp_map = HashMap::<u64, usize>::new();
 
         for inst in decoder.iter() {
-            if inst.is_ip_rel_memory_operand() {
+            if inst.is_ip_rel_memory_operand() { // or if its contained in relocs?
+                // todo check pefile for relocs at inst.ip(), if it has entry
+                // add relocate opcode that pops latest address from stack
+                // relocates it and pushes it back or something like that
+                // -
+                // for rip relative just get absolute address?
                 panic!("instruction relocation not supported yet");
             }
 
@@ -165,9 +170,27 @@ impl Virtualizer {
                     }
                 }
                 _ => {
+                    /*
                     let mut output = String::new();
                     NasmFormatter::new().format(&inst, &mut output);
                     panic!("unsupported instruction: {}", output);
+                     */
+                    // todo
+                    // emit special vmexit (or just vmexitrenter whatever) opcode
+                    // relocate instruction into bytecode (max instruction size is 15 bytes afaik?)
+                    // so vmreexit (or smthin) relocinstr (instr data (relocated if rip relative)
+                    // vmexit (restore registers)
+                    // executes instr data somehow (alloc rwx or change bytecode protection
+                    // vmreenter with changed registers (maybe without deallocating reallocation
+                    // of stack somehow if possible, but not needed)
+                    // maybe jit assemble it in the vm like
+                    // call vmexit (it will have to restore all registers afaik)
+                    // call should make it return here instead of before original vmenter
+                    // jitasm.insert(unvirt_instr)M
+                    // jitasm.push(self.pc + size_of unvirt instr);
+                    // jitasm.jmp(vmenter);
+                    // jitasm.execute() // allocates rwx region, moves bytes there
+                    // and executes by jmp (original ret addr needs to be saved)
                 }
             }
         }

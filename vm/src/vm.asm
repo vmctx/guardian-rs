@@ -116,6 +116,7 @@ vmexit:
     // restore gpr
     mov rax, [rcx + {rax}]
     mov rdx, [rcx + {rdx}]
+    // todo i think this should just restore all gprs
     // mov rbx, [rcx + {rbx}] // non vol
     // mov rbp, [rcx + {rbp}] // non vol
     // mov rsi, [rcx + {rsi}] // non vol

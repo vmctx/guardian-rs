@@ -116,6 +116,8 @@ fn patch_function(pefile: &mut VecPE, target_fn: usize, target_fn_size: usize, v
         }
      */
     let mut a = CodeAssembler::new(64).unwrap();
+    // todo if target isnt a function, but a block of code then push rip + size of this
+    // on stack for return address
     a.push(bytecode_rva as i32).unwrap();
     a.jmp(vm_rva as u64 - target_fn as u64).unwrap();
 
