@@ -3,6 +3,7 @@ target = "x86_64-pc-windows-msvc"
 # target = "i686-pc-windows-msvc"
 
 rustflags = [
+    # "-C", "force-unwind-tables=no",
     "-Z", "location-detail=none",
     "-C", "link-arg=/MAP:target/x86_64-pc-windows-msvc/release/vm.map",
     # Pre Link Args
@@ -14,12 +15,11 @@ rustflags = [
     #"-Z", "pre-link-arg=/MANIFEST:NO",
 
     # Post Link Args
-    "-C", "relocation-model=pie",
+    "-C", "target-feature=+crt-static",
+    "-C", "relocation-model=pic",
     "-C", "link-arg=/ENTRY:vmentry",
-    "-C", "link-arg=/OPT:NOREF",
     #"-C", "link-arg=/OPT:REF,ICF",
     "-C", "link-arg=/SAFESEH:NO",
-    "-C", "link-arg=/LTCG:OFF",
     #"-C", "link-arg=/INTEGRITYCHECK"
     "-C", "link-arg=/DEBUG:NONE",
     "-C", "link-arg=/MERGE:.rdata=.text",

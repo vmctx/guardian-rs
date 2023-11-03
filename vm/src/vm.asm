@@ -54,7 +54,6 @@ vmentry:
     mov rcx, rsp
     call new_vm
     add rsp, {sizeof_machine}
-    mov rax, rcx
     popvol
     jmp vmenter
 
@@ -99,8 +98,7 @@ vmenter:
     jmp vmexit
 
 vmexit:
-    mov rdx, rsp
-    sub rdx, {cpustack_offset} // mov rdx, [rcx + {cpustack}]
+    mov rdx, [rcx + {cpustack}]
     // restore old stack
     mov rsp, [rcx + {rsp}]
     // preserve self ptr

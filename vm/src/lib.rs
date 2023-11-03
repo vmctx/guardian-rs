@@ -218,16 +218,17 @@ static_assertions::const_assert_eq!(core::mem::size_of::<Machine>(), 0xa8);
 
 impl Machine {
     #[no_mangle]
-    pub unsafe extern "C" fn new_vm(out: *mut Self) {
-        #[cfg(not(feature = "testing"))] {
-            *out = Self {
-                pc: core::ptr::null(),
-                sp: core::ptr::null_mut(),
-                regs: [0; 16],
-                rflags: 0,
-                vmstack: allocator::allocate(Layout::new::<[u64; VM_STACK_SIZE]>()).cast(),
-                cpustack: allocator::allocate(Layout::new::<[u8; CPU_STACK_SIZE]>()),
-            };
+    #[cfg(not(feature = "testing"))]
+    pub unsafe extern "C" fn new_vm(_ptr: *const u64) -> Self {
+        // with opt-level z this can generate different code
+        // putting self in rcx (input arg) rather than rax
+        Self {
+            pc: core::ptr::null(),
+            sp: core::ptr::null_mut(),
+            regs: [0; 16],
+            rflags: 0,
+            vmstack: allocator::allocate(Layout::new::<[u64; VM_STACK_SIZE]>()).cast(),
+            cpustack: allocator::allocate(Layout::new::<[u8; CPU_STACK_SIZE]>()),
         }
     }
 
@@ -369,7 +370,7 @@ impl Machine {
             .add((VM_STACK_SIZE - 0x100 - size_of::<u64>()) / size_of::<*mut u64>());
 
         let mut instructions = Vec::from_raw_parts(
-            allocator::allocate(Layout::new::<[u8; 0x1000]>()), 0, 0x1000
+            allocator::allocate(Layout::new::<[u8; 0x1000]>()), 0, 0x1000,
         );
 
         // todo recode flags to calculate instead, cuz it can cause ub when
@@ -428,7 +429,7 @@ impl Machine {
                 Opcode::Vmctx => self.stack_push(self as *const _ as u64),
                 Opcode::VmExec => {
                     // alloc buffer here
-                    //reloc_instr(self, &mut instructions);
+                    reloc_instr(self, &mut instructions);
                     instructions.clear();
                     // should be done, deallocate buffer now
                 }
