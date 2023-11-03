@@ -24,7 +24,7 @@ mod tests {
     fn rax_and_ax() {
         use iced_x86::code_asm::*;
         let mut a = CodeAssembler::new(64).unwrap();
-        a.mov(rax, rcx).unwrap();
+        a.adc(rax, rcx).unwrap();
         a.mov(ax, 0x7777).unwrap();
         a.ret().unwrap();
 

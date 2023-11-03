@@ -7,12 +7,14 @@ extern crate alloc;
 
 use alloc::alloc::dealloc;
 use alloc::vec;
+use alloc::vec::Vec;
 use core::alloc::Layout;
 use core::convert::TryFrom;
 use core::mem::forget;
 use core::mem::size_of;
 use core::ops::BitXor;
 use core::ptr::read_unaligned;
+use memoffset::offset_of;
 
 use x86::bits64::rflags::RFlags;
 
@@ -28,13 +30,13 @@ mod handlers;
 // mod region;
 
 const VM_STACK_SIZE: usize = 0x1000;
-const CPU_STACK_SIZE: usize = 0x1000;
+const CPU_STACK_SIZE: usize = 0x2000;
 
 #[cfg(not(feature = "testing"))]
 mod vm;
 mod syscalls;
 #[allow(dead_code)]
-mod assembler;
+pub mod assembler;
 
 #[global_allocator]
 static ALLOCATOR: allocator::Allocator = allocator::Allocator;
@@ -67,7 +69,8 @@ pub enum Opcode {
     VmAdd,
     VmMul,
     VmSub,
-    Vmexit,
+    VmExec,
+    VmExit,
 }
 
 #[repr(u8)]
@@ -180,6 +183,10 @@ macro_rules! rotate {
 }
 
 pub(crate) use rotate;
+use crate::assembler::{Asm, Imm64, Reg64};
+use crate::assembler::prelude::{Add, Call, Jmp, Mov, Pop, Push};
+use crate::assembler::Reg64::*;
+use crate::syscalls::NtProtectVirtualMemory;
 
 #[repr(u8)]
 #[derive(Debug, Copy, Clone, num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
@@ -194,7 +201,7 @@ pub enum OpSize {
 pub struct Machine {
     pc: *const u8,
     sp: *mut u64,
-    regs: [u64; 16],
+    pub regs: [u64; 16],
     rflags: u64,
     vmstack: *mut u64,
     #[cfg(not(feature = "testing"))]
@@ -213,18 +220,14 @@ impl Machine {
     #[no_mangle]
     pub unsafe extern "C" fn new_vm(out: *mut Self) {
         #[cfg(not(feature = "testing"))] {
-            let mut cpustack = vec![0u8; CPU_STACK_SIZE];
-            let mut vmstack = vec![0u64; VM_STACK_SIZE];
             *out = Self {
                 pc: core::ptr::null(),
                 sp: core::ptr::null_mut(),
                 regs: [0; 16],
                 rflags: 0,
-                vmstack: vmstack.as_mut_ptr(),
-                cpustack: cpustack.as_mut_ptr(),
+                vmstack: allocator::allocate(Layout::new::<[u64; VM_STACK_SIZE]>()).cast(),
+                cpustack: allocator::allocate(Layout::new::<[u8; CPU_STACK_SIZE]>()),
             };
-            forget(cpustack);
-            forget(vmstack);
         }
     }
 
@@ -315,12 +318,12 @@ impl Machine {
             (&rcx, Register::Rcx.into()),
         ];
 
+        a.mov(rcx, &mut m as *mut _ as u64).unwrap();
+
         // restore rflags
-        a.mov(rax, qword_ptr(rax + memoffset::offset_of!(Machine, rflags))).unwrap();
+        a.mov(rax, qword_ptr(rcx + memoffset::offset_of!(Machine, rflags))).unwrap();
         a.push(rax).unwrap();
         a.popfq().unwrap();
-
-        a.mov(rcx, &mut m as *mut _ as u64).unwrap();
 
         // Restore the GPRs
         for (reg, regid) in regmap.iter() {
@@ -364,6 +367,10 @@ impl Machine {
         self.pc = program;
         self.sp = self.vmstack
             .add((VM_STACK_SIZE - 0x100 - size_of::<u64>()) / size_of::<*mut u64>());
+
+        let mut instructions = Vec::from_raw_parts(
+            allocator::allocate(Layout::new::<[u8; 0x1000]>()), 0, 0x1000
+        );
 
         // todo recode flags to calculate instead, cuz it can cause ub when
         // compilation doesnt do it the way i want
@@ -419,7 +426,13 @@ impl Machine {
                 Opcode::VmSub => binary_op!(self, wrapping_sub),
                 Opcode::VmMul => binary_op!(self, wrapping_mul),
                 Opcode::Vmctx => self.stack_push(self as *const _ as u64),
-                Opcode::Vmexit => break
+                Opcode::VmExec => {
+                    // alloc buffer here
+                    //reloc_instr(self, &mut instructions);
+                    instructions.clear();
+                    // should be done, deallocate buffer now
+                }
+                Opcode::VmExit => break
             }
         }
 
@@ -431,6 +444,7 @@ impl Machine {
     pub extern "C" fn dealloc(&mut self, stack_ptr: *mut u8) {
         #[cfg(not(feature = "testing"))]
         unsafe { dealloc(self.vmstack as _, Layout::new::<[u64; VM_STACK_SIZE]>()) }
+        // for some reason using self after first dealloc here does not work
         #[cfg(not(feature = "testing"))]
         unsafe { dealloc(stack_ptr, Layout::new::<[u8; CPU_STACK_SIZE]>()) }
     }
@@ -439,6 +453,95 @@ impl Machine {
     pub fn set_rflags(&mut self) {
         self.rflags = x86::bits64::rflags::read().bits();
     }
+}
+
+#[inline(never)]
+pub fn reloc_instr(vm: &mut Machine, instr_buffer: &mut Vec<u8>) {
+    // make instructions.as_mut() rwx
+    let mut old_rsp = 0;
+
+    let regmap: &[(&Reg64, u8)] = &[
+        (&rax, Register::Rax.into()),
+        (&rbx, Register::Rbx.into()),
+        (&rdx, Register::Rdx.into()),
+        (&rsp, Register::Rsp.into()),
+        (&rbp, Register::Rbp.into()),
+        (&rsi, Register::Rsi.into()),
+        (&rdi, Register::Rdi.into()),
+        (&r8, Register::R8.into()),
+        (&r9, Register::R9.into()),
+        (&r10, Register::R10.into()),
+        (&r11, Register::R11.into()),
+        (&r12, Register::R12.into()),
+        (&r13, Register::R13.into()),
+        (&r14, Register::R14.into()),
+        (&r15, Register::R15.into()),
+    ];
+
+    let mut asm = Asm::new(instr_buffer);
+
+    asm.mov(rax, Imm64::from(&mut old_rsp as *mut _ as u64));
+    asm.mov(assembler::MemOp::Indirect(rax), rsp);
+
+    for (reg, regid) in regmap.iter() {
+        let offset = offset_of!(Machine, regs) + *regid as usize * 8;
+        asm.mov(**reg, assembler::MemOp::IndirectDisp(rcx, offset as i32));
+    }
+
+    asm.mov(rcx, assembler::MemOp::IndirectDisp(rcx, (offset_of!(Machine, regs) + Register::Rcx as u8 as usize * 8) as i32));
+    // todo instr_buffer.insert(unvirt_instr);
+    asm.push(rax); // this decreases rsp need to adjust
+    asm.mov(rax, Imm64::from(vm as *mut _ as u64));
+
+    let regmap: &[(&Reg64, u8)] = &[
+        (&rbx, Register::Rbx.into()),
+        (&rcx, Register::Rbx.into()),
+        (&rdx, Register::Rdx.into()),
+        (&rbp, Register::Rbp.into()),
+        (&rsi, Register::Rsi.into()),
+        (&rdi, Register::Rdi.into()),
+        (&r8, Register::R8.into()),
+        (&r9, Register::R9.into()),
+        (&r10, Register::R10.into()),
+        (&r11, Register::R11.into()),
+        (&r12, Register::R12.into()),
+        (&r13, Register::R13.into()),
+        (&r14, Register::R14.into()),
+        (&r15, Register::R15.into()),
+    ];
+
+    for (reg, regid) in regmap.iter() {
+        let offset = offset_of!(Machine, regs) + *regid as usize * 8;
+        asm.mov(assembler::MemOp::IndirectDisp(rax, offset as i32), **reg);
+    }
+
+    // save rax too
+    asm.mov(rcx, rax);
+    asm.pop(rax);
+    // save rsp after stack ptr is adjusted again
+    asm.mov(assembler::MemOp::IndirectDisp(rcx, offset_of!(Machine, regs) as i32 + (Register::Rsp as u8 as usize * 8) as i32), rsp);
+    asm.mov(assembler::MemOp::IndirectDisp(rcx, offset_of!(Machine, regs) as i32), rax);
+
+    asm.mov(rax, Imm64::from(&mut old_rsp as *mut _ as u64));
+
+    asm.mov(rsp, assembler::MemOp::Indirect(rax));
+    asm.ret();
+
+    let mut address = instr_buffer.as_mut_ptr() as usize;
+    let mut size = instr_buffer.len();
+    let mut old_protect = 0;
+    unsafe {
+        NtProtectVirtualMemory(
+            -1isize as *mut winapi::ctypes::c_void,
+            &mut address as *mut usize as _,
+            &mut size,
+            0x40, // rwx
+            &mut old_protect, // page RW
+        );
+    }
+
+    let func = unsafe { core::mem::transmute::<_, extern "C" fn(*mut Machine)>(instr_buffer.as_mut_ptr()) };
+    func(vm);
 }
 
 #[cfg(feature = "testing")]

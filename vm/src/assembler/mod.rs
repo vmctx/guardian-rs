@@ -123,21 +123,26 @@ const fn modrm(mod_: u8, reg: u8, rm: u8) -> u8 {
 }
 
 /// `x64` jit assembler.
-pub struct Asm {
-    buf: Vec<u8>,
+pub struct Asm<'a> {
+    buf: &'a mut Vec<u8>,
 }
 
-impl Asm {
+impl Asm<'_> {
     /// Create a new `x64` jit assembler.
-    pub fn new() -> Asm {
-        // Some random default capacity.
-        let buf = Vec::with_capacity(1024);
+    pub fn new(buf: &mut Vec<u8>) -> Asm {
         Asm { buf }
     }
 
+    /* causes ub
     /// Consume the assembler and get the emitted code.
     pub fn into_code(self) -> Vec<u8> {
         self.buf
+    }
+     */
+
+    /// Return a mutable reference to the emitted code
+    pub fn code(&mut self) -> &mut Vec<u8> {
+        &mut self.buf
     }
 
     /// Emit a slice of bytes.
@@ -353,14 +358,14 @@ trait EncodeRR<T: Reg> {
     }
 }
 
-impl EncodeRR<Reg8> for Asm {}
-impl EncodeRR<Reg32> for Asm {}
-impl EncodeRR<Reg16> for Asm {
+impl EncodeRR<Reg8> for Asm<'_>{}
+impl EncodeRR<Reg32> for Asm<'_> {}
+impl EncodeRR<Reg16> for Asm<'_> {
     fn legacy_prefix() -> Option<u8> {
         Some(0x66)
     }
 }
-impl EncodeRR<Reg64> for Asm {}
+impl EncodeRR<Reg64> for Asm<'_> {}
 
 /// Encode helper for register instructions.
 trait EncodeR<T: Reg> {
@@ -377,14 +382,14 @@ trait EncodeR<T: Reg> {
     }
 }
 
-impl EncodeR<Reg8> for Asm {}
-impl EncodeR<Reg32> for Asm {}
-impl EncodeR<Reg16> for Asm {
+impl EncodeR<Reg8> for Asm<'_> {}
+impl EncodeR<Reg32> for Asm<'_> {}
+impl EncodeR<Reg16> for Asm<'_> {
     fn legacy_prefix() -> Option<u8> {
         Some(0x66)
     }
 }
-impl EncodeR<Reg64> for Asm {}
+impl EncodeR<Reg64> for Asm<'_>{}
 
 /// Encode helper for memory-register instructions.
 trait EncodeMR<T: Reg> {
@@ -401,11 +406,11 @@ trait EncodeMR<T: Reg> {
     }
 }
 
-impl EncodeMR<Reg8> for Asm {}
-impl EncodeMR<Reg16> for Asm {
+impl EncodeMR<Reg8> for Asm<'_> {}
+impl EncodeMR<Reg16> for Asm<'_> {
     fn legacy_prefix() -> Option<u8> {
         Some(0x66)
     }
 }
-impl EncodeMR<Reg32> for Asm {}
-impl EncodeMR<Reg64> for Asm {}
+impl EncodeMR<Reg32> for Asm<'_> {}
+impl EncodeMR<Reg64> for Asm<'_> {}

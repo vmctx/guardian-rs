@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use crate::virt::machine::{Machine, Assembler, Register, JmpCond, OpSized, OpSize, HigherLower8Bit, RegUp};
-use iced_x86::{Decoder, Formatter, Instruction, Mnemonic, NasmFormatter, OpKind};
+use iced_x86::{Decoder, Encoder, Formatter, Instruction, Mnemonic, NasmFormatter, OpKind};
 use memoffset::offset_of;
 
 trait Asm {
@@ -113,6 +113,7 @@ impl Virtualizer {
                 // todo check pefile for relocs at inst.ip(), if it has entry
                 // add relocate opcode that pops latest address from stack
                 // relocates it and pushes it back or something like that
+                // https://github.com/layerfsd/phantasm-x86-virtualizer/blob/master/chvrn_vm/relocations.cpp
                 // -
                 // for rip relative just get absolute address?
                 panic!("instruction relocation not supported yet");
@@ -170,6 +171,10 @@ impl Virtualizer {
                     }
                 }
                 _ => {
+                    let mut encoder = Encoder::new(64);
+                    encoder.encode(&inst, inst.ip()).unwrap();
+                    println!("{:x?}",  encoder.take_buffer());
+                    panic!("unsupported instruction");
                     /*
                     let mut output = String::new();
                     NasmFormatter::new().format(&inst, &mut output);
@@ -191,6 +196,16 @@ impl Virtualizer {
                     // jitasm.jmp(vmenter);
                     // jitasm.execute() // allocates rwx region, moves bytes there
                     // and executes by jmp (original ret addr needs to be saved)
+                    // option 2
+                    // allocate instructions on vmstack ? or allocate buffer
+                    // do the jit assemble above
+                    // set first ret addr to addr of buffer (for vmexit)
+                    // set second to here + size of inst buffer or sumthin
+                    // jmp vmexit (but without dealloc), just restoring rsp etc
+                    // then save regs after jmping back
+                    // -
+                    // it should restore regs, ret to buffer, ret to here, save regs,
+                    // continue execution
                 }
             }
         }

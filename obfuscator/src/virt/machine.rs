@@ -47,7 +47,8 @@ pub enum Opcode {
     VmAdd,
     VmMul,
     VmSub,
-    Vmexit,
+    VmExec,
+    VmExit,
 }
 
 pub trait OpSized: Sized {
@@ -462,7 +463,7 @@ impl Assembler {
     }
 
     pub fn vmexit(&mut self) {
-        self.emit(Opcode::Vmexit);
+        self.emit(Opcode::VmExit);
     }
 
     fn emit_sized<T: OpSized>(&mut self, op: Opcode) {

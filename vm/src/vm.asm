@@ -100,7 +100,7 @@ vmenter:
 
 vmexit:
     mov rdx, rsp
-    sub rdx, {cpustack_offset}
+    sub rdx, {cpustack_offset} // mov rdx, [rcx + {cpustack}]
     // restore old stack
     mov rsp, [rcx + {rsp}]
     // preserve self ptr

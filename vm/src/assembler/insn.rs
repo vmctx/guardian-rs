@@ -10,6 +10,18 @@ mod mov;
 mod nop;
 mod ret;
 mod test;
+mod push;
+mod pop;
+
+pub trait Push<T> {
+    /// Emit a push instruction.
+    fn push(&mut self, op1: T);
+}
+
+pub trait Pop<T> {
+    /// Emit a pop instruction.
+    fn pop(&mut self, op1: T);
+}
 
 pub trait Add<T, U> {
     /// Emit an add instruction.

@@ -16,4 +16,5 @@ toolchain = "nightly"
 command = "cargo"
 # args = ["test", "--all-features"]
 args = ["test", "--all-features", "--profile", "release"]
+# "--", "--test-threads=1"
 install_crate = false
