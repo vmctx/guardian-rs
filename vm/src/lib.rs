@@ -14,6 +14,7 @@ use core::mem::forget;
 use core::mem::size_of;
 use core::ops::BitXor;
 use core::ptr::read_unaligned;
+use core::slice;
 use memoffset::offset_of;
 
 use x86::bits64::rflags::RFlags;
@@ -429,8 +430,12 @@ impl Machine {
                 Opcode::Vmctx => self.stack_push(self as *const _ as u64),
                 Opcode::VmExec => {
                     // alloc buffer here
-                    reloc_instr(self, &mut instructions);
+                    let instr_size = self.pc.read_unaligned() as usize;
+                    self.pc = self.pc.add(1); // skip instr size
+                    reloc_instr(self, instr_size, &mut instructions);
                     instructions.clear();
+
+                    self.pc = self.pc.add(instr_size);
                     // should be done, deallocate buffer now
                 }
                 Opcode::VmExit => break
@@ -457,9 +462,10 @@ impl Machine {
 }
 
 #[inline(never)]
-pub fn reloc_instr(vm: &mut Machine, instr_buffer: &mut Vec<u8>) {
+pub fn reloc_instr(vm: &mut Machine, instr_size: usize, instr_buffer: &mut Vec<u8>) {
     // make instructions.as_mut() rwx
-    let mut old_rsp = 0;
+    let mut old_rsp: u64 = 0;
+    let mut old_rbp: u64 = 0;
 
     let regmap: &[(&Reg64, u8)] = &[
         (&rax, Register::Rax.into()),
@@ -481,8 +487,11 @@ pub fn reloc_instr(vm: &mut Machine, instr_buffer: &mut Vec<u8>) {
 
     let mut asm = Asm::new(instr_buffer);
 
+    // todo backup all regs
     asm.mov(rax, Imm64::from(&mut old_rsp as *mut _ as u64));
     asm.mov(assembler::MemOp::Indirect(rax), rsp);
+    asm.mov(rax, Imm64::from(&mut old_rbp as *mut _ as u64));
+    asm.mov(assembler::MemOp::Indirect(rax), rbp);
 
     for (reg, regid) in regmap.iter() {
         let offset = offset_of!(Machine, regs) + *regid as usize * 8;
@@ -490,7 +499,10 @@ pub fn reloc_instr(vm: &mut Machine, instr_buffer: &mut Vec<u8>) {
     }
 
     asm.mov(rcx, assembler::MemOp::IndirectDisp(rcx, (offset_of!(Machine, regs) + Register::Rcx as u8 as usize * 8) as i32));
-    // todo instr_buffer.insert(unvirt_instr);
+
+    let slice = unsafe { slice::from_raw_parts(vm.pc, instr_size) };
+    asm.code().extend_from_slice(slice);
+
     asm.push(rax); // this decreases rsp need to adjust
     asm.mov(rax, Imm64::from(vm as *mut _ as u64));
 
@@ -523,9 +535,11 @@ pub fn reloc_instr(vm: &mut Machine, instr_buffer: &mut Vec<u8>) {
     asm.mov(assembler::MemOp::IndirectDisp(rcx, offset_of!(Machine, regs) as i32 + (Register::Rsp as u8 as usize * 8) as i32), rsp);
     asm.mov(assembler::MemOp::IndirectDisp(rcx, offset_of!(Machine, regs) as i32), rax);
 
+    // todo restore all regs
     asm.mov(rax, Imm64::from(&mut old_rsp as *mut _ as u64));
-
     asm.mov(rsp, assembler::MemOp::Indirect(rax));
+    asm.mov(rax, Imm64::from(&mut old_rbp as *mut _ as u64));
+    asm.mov(rbp, assembler::MemOp::Indirect(rax));
     asm.ret();
 
     let mut address = instr_buffer.as_mut_ptr() as usize;

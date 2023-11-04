@@ -1,6 +1,6 @@
 use anyhow::Result;
 use std::ptr::read_unaligned;
-use iced_x86::{MemorySize, OpKind};
+use iced_x86::{Encoder, MemorySize, OpKind};
 use num_enum::TryFromPrimitiveError;
 
 #[repr(C)]
@@ -462,6 +462,15 @@ impl Assembler {
         self.emit(Opcode::Vmctx);
     }
 
+    pub fn vmexec(&mut self, instr: iced_x86::Instruction) {
+        self.emit(Opcode::VmExec);
+        let mut encoder = Encoder::new(64);
+        encoder.encode(&instr, instr.ip()).unwrap();
+        let instr_buffer = encoder.take_buffer();
+        self.emit_const(instr_buffer.len() as u8);
+        self.program.extend_from_slice(&instr_buffer);
+    }
+
     pub fn vmexit(&mut self) {
         self.emit(Opcode::VmExit);
     }
@@ -513,6 +522,10 @@ pub fn disassemble(program: &[u8]) -> Result<String> {
                 let cond = JmpCond::try_from(read_unaligned(pc.add(2))).unwrap();
                 let val = instruction.value.unwrap();
                 s.push_str(format!(" {:?} 0x{:x}", cond, val).as_str());
+            },
+            Opcode::VmExec => unsafe {
+                let instr_size = pc.add(2).read_unaligned() as usize;
+                pc = pc.add(instr_size + 1);
             }
             _ => {}
         }

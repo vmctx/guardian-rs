@@ -21,10 +21,24 @@ mod tests {
 
     #[test]
     #[cfg(target_env = "msvc")]
+    fn test_unsupported() {
+        use iced_x86::code_asm::*;
+        let mut a = CodeAssembler::new(64).unwrap();
+        a.movzx(rax, cx).unwrap();
+        a.ret().unwrap();
+
+        let bytecode = virtualize(&a.assemble(0).unwrap());
+        let m = Machine::new(bytecode.as_ptr()).unwrap();
+        let f: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        assert_eq!(f(0x1111222233334444), 0x4444);
+    }
+
+    #[test]
+    #[cfg(target_env = "msvc")]
     fn rax_and_ax() {
         use iced_x86::code_asm::*;
         let mut a = CodeAssembler::new(64).unwrap();
-        a.adc(rax, rcx).unwrap();
+        a.mov(rax, rcx).unwrap();
         a.mov(ax, 0x7777).unwrap();
         a.ret().unwrap();
 

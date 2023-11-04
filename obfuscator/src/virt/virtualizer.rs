@@ -129,7 +129,7 @@ impl Virtualizer {
 
             match inst.mnemonic() {
                 Mnemonic::Mov => self.mov(&inst),
-                Mnemonic::Movzx => self.movzx(&inst),
+                //Mnemonic::Movzx => self.movzx(&inst),
                 Mnemonic::Add => self.add(&inst),
                 Mnemonic::Sub => self.sub(&inst),
                 // todo for now dont support them, see div method below
@@ -171,10 +171,8 @@ impl Virtualizer {
                     }
                 }
                 _ => {
-                    let mut encoder = Encoder::new(64);
-                    encoder.encode(&inst, inst.ip()).unwrap();
-                    println!("{:x?}",  encoder.take_buffer());
-                    panic!("unsupported instruction");
+                    // todo check for control flow altering instructions and give error
+                    self.asm.vmexec(inst);
                     /*
                     let mut output = String::new();
                     NasmFormatter::new().format(&inst, &mut output);

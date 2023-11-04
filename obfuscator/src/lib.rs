@@ -80,41 +80,29 @@ fn virtualize_functions(pefile: &VecPE, map_file: MapFile, functions: &[String])
     let mut virtualized_fns = Vec::new();
 
     for function in functions {
-        println!("searching {}", function);
         let (function, function_size) = map_file.get_function(function).unwrap();
-        println!("found target function: {}: {:x}:{}", function.symbol, function.rva.0, function_size);
+
         let target_fn_addr = pefile.rva_to_offset(RVA(function.rva.0 as _)).unwrap().0 as _;
         let target_function = pefile.get_slice_ref::<u8>(target_fn_addr, function_size).unwrap();
         let function_size = Disassembler::from_bytes(target_function.to_vec()).disassemble();
         // get again but with "real" (hopefully) size
         let target_function = pefile.get_slice_ref::<u8>(target_fn_addr, function_size).unwrap();
-        println!("{:x}", pefile.get_image_base().unwrap() + function.rva.0 as u64);
         let mut virtualized_function = virtualize_with_ip(
             pefile.get_image_base().unwrap() + function.rva.0 as u64,
             target_function,
         );
-        println!("{}", disassemble(&virtualized_function).unwrap());
-        println!("{:x?}", virtualized_function);
         virtualized_fns.push(VirtualizedFn {
             rva: function.rva.0,
             size: function_size,
             bytecode_offset: bytecode.len(), // todo should be correct ?
         });
         bytecode.append(&mut virtualized_function);
-        println!("added target function: {}: {:x}:{}", function.symbol, function.rva.0, function_size);
     }
 
     (bytecode, virtualized_fns)
 }
 
 fn patch_function(pefile: &mut VecPE, target_fn: usize, target_fn_size: usize, vm_rva: u32, bytecode_rva: u32) -> usize {
-    /*
-        for index in 0..pefile.get_buffer().len() {
-            if index >= target_fn && index <= target_fn + target_fn_size {
-                pefile.remove(index);
-            }
-        }
-     */
     let mut a = CodeAssembler::new(64).unwrap();
     // todo if target isnt a function, but a block of code then push rip + size of this
     // on stack for return address
