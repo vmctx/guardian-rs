@@ -442,12 +442,12 @@ impl Machine {
 
     #[no_mangle]
     #[cfg(not(feature = "testing"))]
-    pub extern "C" fn dealloc(&mut self, stack_ptr: *mut u8) {
+    pub extern "C" fn dealloc(&mut self) {
         #[cfg(not(feature = "testing"))]
-        unsafe { dealloc(self.vmstack as _, Layout::new::<[u64; VM_STACK_SIZE]>()) }
+        unsafe { dealloc(self.vmstack.cast(), Layout::new::<[u64; VM_STACK_SIZE]>()) }
         // for some reason using self after first dealloc here does not work
         #[cfg(not(feature = "testing"))]
-        unsafe { dealloc(stack_ptr, Layout::new::<[u8; CPU_STACK_SIZE]>()) }
+        unsafe { dealloc(self.cpustack, Layout::new::<[u8; CPU_STACK_SIZE]>()) }
     }
 
     #[inline(always)]

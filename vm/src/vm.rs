@@ -26,7 +26,3 @@ global_asm!(include_str!("vm.asm"),
     cpustack = const offset_of!(Machine, cpustack),
     cpustack_offset = const CPU_STACK_SIZE - 0x100 - core::mem::size_of::<u64>() // maybe define cpustack len as const
 );
-
-extern "C" {
-    pub fn vmexit(machine: &mut Machine);
-}

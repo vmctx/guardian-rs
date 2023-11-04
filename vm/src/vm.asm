@@ -98,7 +98,6 @@ vmenter:
     jmp vmexit
 
 vmexit:
-    mov rdx, [rcx + {cpustack}]
     // restore old stack
     mov rsp, [rcx + {rsp}]
     // preserve self ptr
