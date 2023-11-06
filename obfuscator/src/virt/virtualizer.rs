@@ -1,7 +1,9 @@
 use std::collections::HashMap;
+use exe::{PE, VecPE};
 use crate::virt::machine::{Machine, Assembler, Register, JmpCond, OpSized, OpSize, HigherLower8Bit, RegUp};
 use iced_x86::{Decoder, Encoder, Formatter, Instruction, Mnemonic, NasmFormatter, OpKind};
 use memoffset::offset_of;
+use crate::diassembler::Disassembler;
 
 trait Asm {
     fn const_<T: OpSized>(&mut self, v: T);
@@ -90,12 +92,21 @@ macro_rules! sized_op {
 
 struct Virtualizer {
     asm: Assembler,
+    pe: Option<VecPE>,
 }
 
 impl Virtualizer {
     pub fn new() -> Self {
         Self {
             asm: Assembler::default(),
+            pe: None,
+        }
+    }
+
+    pub fn with_pe(pe: VecPE) -> Self {
+        Self {
+            asm: Assembler::default(),
+            pe: Some(pe),
         }
     }
 
@@ -108,7 +119,7 @@ impl Virtualizer {
         let mut unresolved_jmps = 0;
         let mut jmp_map = HashMap::<u64, usize>::new();
 
-        for inst in decoder.iter() {
+        for mut inst in decoder.iter() {
             if inst.is_ip_rel_memory_operand() { // or if its contained in relocs?
                 // todo check pefile for relocs at inst.ip(), if it has entry
                 // add relocate opcode that pops latest address from stack
@@ -116,7 +127,6 @@ impl Virtualizer {
                 // https://github.com/layerfsd/phantasm-x86-virtualizer/blob/master/chvrn_vm/relocations.cpp
                 // -
                 // for rip relative just get absolute address?
-                panic!("instruction relocation not supported yet");
             }
 
             if jmp_map.contains_key(&inst.ip()) {
@@ -150,7 +160,7 @@ impl Virtualizer {
                 Mnemonic::Pop => self.pop(&inst),
                 Mnemonic::Jmp | Mnemonic::Je | Mnemonic::Jne | Mnemonic::Jbe
                 | Mnemonic::Ja | Mnemonic::Jle | Mnemonic::Jg => {
-                    if !inst.is_jcc_short() && !inst.is_jmp_short() {
+                    if !inst.is_jcc_short_or_near() && !inst.is_jmp_short_or_near() {
                         let mut output = String::new();
                         NasmFormatter::new().format(&inst, &mut output);
                         panic!("unsupported jmp: {}", output);
@@ -171,6 +181,37 @@ impl Virtualizer {
                     }
                 }
                 _ => {
+                    if inst.is_jmp_short() || inst.is_jmp_short_or_near() || inst.is_jmp_near_indirect() || inst.is_jmp_far() || inst.is_jmp_far_indirect() {
+                        panic!("unsupported");
+                    }
+
+                    let mut encoder = Encoder::new(64);
+                    encoder.encode(&inst, inst.ip()).unwrap();
+                    let instr_buffer = encoder.take_buffer();
+                    Disassembler::from_bytes(instr_buffer).disassemble();
+                    if inst.op_kinds().any(|x| x == OpKind::Memory) && inst.is_ip_rel_memory_operand() {
+                        println!("{:x}", inst.memory_displacement32());
+                        // currently i only know how to calculate it if i know the new rip
+                        /*
+                        14800+ 20 = 14820
+                        14000+ 20 = 14020
+
+                        14800(old_rip) - 14000(rip) = 800 + 14000 (rip)
+
+                        14500+ 20 = 14520
+                        14800+ 20 = 14820
+
+                        14200(old_rip) diff 14800(rip) =  14800 - 600(DIFF)
+                         */
+                        inst.set_memory_displacement32((inst.next_ip() + inst.memory_displacement64()) as u32);
+                        println!("{:x}", inst.memory_displacement32());
+                    }
+
+                    let mut encoder = Encoder::new(64);
+                    encoder.encode(&inst, inst.ip()).unwrap();
+                    let instr_buffer = encoder.take_buffer();
+                    Disassembler::from_bytes(instr_buffer).disassemble();
+                    panic!();
                     // todo check for control flow altering instructions and give error
                     self.asm.vmexec(inst);
                     /*
@@ -559,7 +600,13 @@ impl Asm for Virtualizer {
     }
 
     fn lea_operand(&mut self, inst: &Instruction) {
-        if inst.memory_base() != iced_x86::Register::None {
+        if inst.memory_base() == iced_x86::Register::RIP {
+            self.const_(inst.next_ip());
+            self.asm.vmreloc(self.pe.as_ref()
+                .expect("rip relative instr but pe is none")
+                .get_image_base().unwrap()
+            );
+        } else if inst.memory_base() != iced_x86::Register::None {
             self.load_reg(inst.memory_base());
         }
 
@@ -573,6 +620,9 @@ impl Asm for Virtualizer {
             }
         }
 
+        // todo check if it has reloc entry and relocate if it does
+        // check if theres a reloc entry for this instruction, if there is emit
+        // vmrebase opcode (tba, see above)
         self.asm.const_(inst.memory_displacement64());
 
         if inst.memory_base() != iced_x86::Register::None
@@ -587,6 +637,6 @@ pub fn virtualize(program: &[u8]) -> Vec<u8> {
     Virtualizer::new().virtualize(program)
 }
 
-pub fn virtualize_with_ip(ip: u64, program: &[u8]) -> Vec<u8> {
-    Virtualizer::new().virtualize_with_ip(ip, program)
+pub fn virtualize_with_ip(pe: VecPE, ip: u64, program: &[u8]) -> Vec<u8> {
+    Virtualizer::with_pe(pe).virtualize_with_ip(ip, program)
 }

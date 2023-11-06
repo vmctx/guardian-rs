@@ -88,6 +88,7 @@ fn virtualize_functions(pefile: &VecPE, map_file: MapFile, functions: &[String])
         // get again but with "real" (hopefully) size
         let target_function = pefile.get_slice_ref::<u8>(target_fn_addr, function_size).unwrap();
         let mut virtualized_function = virtualize_with_ip(
+            pefile.clone(),
             pefile.get_image_base().unwrap() + function.rva.0 as u64,
             target_function,
         );

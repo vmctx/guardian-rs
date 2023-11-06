@@ -47,6 +47,7 @@ pub enum Opcode {
     VmAdd,
     VmMul,
     VmSub,
+    VmReloc,
     VmExec,
     VmExit,
 }
@@ -435,6 +436,7 @@ impl Assembler {
     pub fn jmp(&mut self, cond: JmpCond, target: u64) {
         self.emit(Opcode::Jmp);
         self.emit_const::<u8>(cond as u8);
+        // could also be u8 or u16
         self.emit_const::<u64>(target);
     }
 
@@ -460,6 +462,11 @@ impl Assembler {
 
     pub fn vmctx(&mut self) {
         self.emit(Opcode::Vmctx);
+    }
+
+    pub fn vmreloc(&mut self, image_base: u64) {
+        self.emit(Opcode::VmReloc);
+        self.emit_const::<u64>(image_base);
     }
 
     pub fn vmexec(&mut self, instr: iced_x86::Instruction) {

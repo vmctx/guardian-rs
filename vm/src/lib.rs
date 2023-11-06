@@ -9,6 +9,7 @@ use alloc::alloc::dealloc;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::alloc::Layout;
+use core::arch::asm;
 use core::convert::TryFrom;
 use core::mem::forget;
 use core::mem::size_of;
@@ -70,6 +71,7 @@ pub enum Opcode {
     VmAdd,
     VmMul,
     VmSub,
+    VmReloc,
     VmExec,
     VmExit,
 }
@@ -419,7 +421,7 @@ impl Machine {
                     self.pc = self.pc.add(1); // skip jmpcond
 
                     if do_jmp {
-                        self.pc = program.add(read_unaligned(self.pc as *const u64) as _);
+                        self.pc = program.add(self.pc.cast::<usize>().read_unaligned());
                     } else {
                         self.pc = self.pc.add(size_of::<u64>());
                     }
@@ -427,6 +429,23 @@ impl Machine {
                 Opcode::VmAdd => binary_op!(self, wrapping_add),
                 Opcode::VmSub => binary_op!(self, wrapping_sub),
                 Opcode::VmMul => binary_op!(self, wrapping_mul),
+                Opcode::VmReloc => {
+                    // todo test
+                    let old_image_base = self.pc.cast::<u64>().read_unaligned();
+                    let current_image_base;
+
+                    asm!(
+                        "mov rax, qword ptr gs:[0x60]",
+                        "mov {}, [rax + 0x10]",
+                        out(reg) current_image_base
+                    );
+
+                    let addr = self.stack_pop::<u64>()
+                        .wrapping_add(old_image_base.abs_diff(current_image_base));
+                    self.stack_push::<u64>(addr);
+
+                    self.pc = self.pc.add(op_size as u8 as usize);
+                }
                 Opcode::Vmctx => self.stack_push(self as *const _ as u64),
                 Opcode::VmExec => {
                     // alloc buffer here
