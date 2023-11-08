@@ -181,6 +181,7 @@ impl Virtualizer {
                     }
                 }
                 _ => {
+                    // todo check for all control flow altering instructions and give error
                     if inst.is_jmp_short() || inst.is_jmp_short_or_near() || inst.is_jmp_near_indirect() || inst.is_jmp_far() || inst.is_jmp_far_indirect() {
                         panic!("unsupported");
                     }
@@ -212,7 +213,6 @@ impl Virtualizer {
                     let instr_buffer = encoder.take_buffer();
                     Disassembler::from_bytes(instr_buffer).disassemble();
                     panic!();
-                    // todo check for control flow altering instructions and give error
                     self.asm.vmexec(inst);
                     /*
                     let mut output = String::new();

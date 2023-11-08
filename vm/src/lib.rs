@@ -448,14 +448,12 @@ impl Machine {
                 }
                 Opcode::Vmctx => self.stack_push(self as *const _ as u64),
                 Opcode::VmExec => {
-                    // alloc buffer here
                     let instr_size = self.pc.read_unaligned() as usize;
                     self.pc = self.pc.add(1); // skip instr size
                     reloc_instr(self, instr_size, &mut instructions);
                     instructions.clear();
 
                     self.pc = self.pc.add(instr_size);
-                    // should be done, deallocate buffer now
                 }
                 Opcode::VmExit => break
             }
@@ -482,9 +480,19 @@ impl Machine {
 
 #[inline(never)]
 pub fn reloc_instr(vm: &mut Machine, instr_size: usize, instr_buffer: &mut Vec<u8>) {
-    // make instructions.as_mut() rwx
-    let mut old_rsp: u64 = 0;
-    let mut old_rbp: u64 = 0;
+    let mut non_vol_regs: [u64; 9] = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+    let non_vol_regmap: &[(&Reg64, u8)] = &[
+        (&rbx, Register::Rbx.into()),
+        (&rsp, Register::Rsp.into()),
+        (&rbp, Register::Rbp.into()),
+        (&rsi, Register::Rsi.into()),
+        (&rdi, Register::Rdi.into()),
+        (&r12, Register::R12.into()),
+        (&r13, Register::R13.into()),
+        (&r14, Register::R14.into()),
+        (&r15, Register::R15.into()),
+    ];
 
     let regmap: &[(&Reg64, u8)] = &[
         (&rax, Register::Rax.into()),
@@ -506,11 +514,12 @@ pub fn reloc_instr(vm: &mut Machine, instr_size: usize, instr_buffer: &mut Vec<u
 
     let mut asm = Asm::new(instr_buffer);
 
-    // todo backup all regs
-    asm.mov(rax, Imm64::from(&mut old_rsp as *mut _ as u64));
-    asm.mov(assembler::MemOp::Indirect(rax), rsp);
-    asm.mov(rax, Imm64::from(&mut old_rbp as *mut _ as u64));
-    asm.mov(assembler::MemOp::Indirect(rax), rbp);
+    asm.mov(rax, Imm64::from(non_vol_regs.as_mut_ptr() as u64));
+
+    for (reg, regid) in non_vol_regmap.iter() {
+        let offset = *regid as usize * 8;
+        asm.mov(assembler::MemOp::IndirectDisp(rax, offset as i32), **reg);
+    }
 
     for (reg, regid) in regmap.iter() {
         let offset = offset_of!(Machine, regs) + *regid as usize * 8;
@@ -554,11 +563,12 @@ pub fn reloc_instr(vm: &mut Machine, instr_size: usize, instr_buffer: &mut Vec<u
     asm.mov(assembler::MemOp::IndirectDisp(rcx, offset_of!(Machine, regs) as i32 + (Register::Rsp as u8 as usize * 8) as i32), rsp);
     asm.mov(assembler::MemOp::IndirectDisp(rcx, offset_of!(Machine, regs) as i32), rax);
 
-    // todo restore all regs
-    asm.mov(rax, Imm64::from(&mut old_rsp as *mut _ as u64));
-    asm.mov(rsp, assembler::MemOp::Indirect(rax));
-    asm.mov(rax, Imm64::from(&mut old_rbp as *mut _ as u64));
-    asm.mov(rbp, assembler::MemOp::Indirect(rax));
+    asm.mov(rax, Imm64::from(non_vol_regs.as_mut_ptr() as u64));
+
+    for (reg, regid) in non_vol_regmap.iter() {
+        let offset = *regid as usize * 8;
+        asm.mov(**reg, assembler::MemOp::IndirectDisp(rax, offset as i32));
+    }
     asm.ret();
 
     let mut address = instr_buffer.as_mut_ptr() as usize;

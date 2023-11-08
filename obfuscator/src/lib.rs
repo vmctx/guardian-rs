@@ -13,6 +13,25 @@ pub mod virt;
 pub mod diassembler;
 pub mod pe;
 
+// todo move all this into a more structure setup
+/*
+struct Obfuscator {
+    pe: VecPe,
+    path: String,
+    path_out: String
+    map_path: Option<String>, // ?
+}
+
+impl Obfuscator {
+    fn remove_routine(&mut self, routine: &Routine (RVA, len maybe) {
+        let offset = self.pe.rva_to_offset(routine.rva).unwrap();
+        let data = vec![0xCC, routine.len()];
+        // or copy_from_slice ?
+        self.pe.write(offset.into(), data).unwrap();
+    }
+}
+ */
+
 pub fn virtualize_file(path: &str, map_path: &str, path_out: &str, functions: Vec<String>) {
     let map_data = std::fs::read(map_path).unwrap();
     let map_string = String::from_utf8(map_data).unwrap();
