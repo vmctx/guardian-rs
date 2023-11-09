@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::ptr::read_unaligned;
 use iced_x86::{Encoder, MemorySize, OpKind};
-use iced_x86::code_asm::CodeAssembler;
+use iced_x86::code_asm::{CodeAssembler, qword_ptr};
 use num_enum::TryFromPrimitiveError;
 
 #[repr(C)]
@@ -130,11 +130,11 @@ impl TryFrom<&iced_x86::Instruction> for OpSize {
 }
 
 pub trait FreeReg {
-    fn get_free_reg(&self) -> iced_x86::Register;
+    fn get_free_regs(&self) -> Vec<iced_x86::code_asm::AsmRegister64>;
 }
 
 impl FreeReg for iced_x86::Instruction {
-    fn get_free_reg(&self) -> Option<iced_x86::code_asm::AsmRegister64> {
+    fn get_free_regs(&self) -> Vec<iced_x86::code_asm::AsmRegister64> {
         use iced_x86::code_asm::*;
         let reg_map: &[(&AsmRegister64, iced_x86::Register)] = &[
             (&rbx, iced_x86::Register::RBX),
@@ -162,14 +162,15 @@ impl FreeReg for iced_x86::Instruction {
             }
         }
 
+        let mut free_regs = Vec::with_capacity(reg_map.len());
+
         for (free_reg, reg) in reg_map {
             if !used_regs.contains(reg) {
-                return Some(**free_reg);
+                free_regs.push(**free_reg);
             }
         }
 
-        // should never be none
-        None
+        free_regs
     }
 }
 
@@ -514,30 +515,27 @@ impl Assembler {
         self.emit_const::<u64>(image_base);
     }
 
-    pub fn vmexec(&mut self, mut instr: iced_x86::Instruction) {
+    pub fn vmexec(&mut self, mut instr: iced_x86::Instruction, image_base: u64) {
         self.emit(Opcode::VmExec);
         if instr.is_ip_rel_memory_operand() {
+            // todo improve and make sure regs are really not used
+            let regs = instr.get_free_regs();
+            assert!(regs.len() >= 2);
+
             let mut asm = CodeAssembler::new(64).unwrap();
-            let reg = instr.get_free_reg().unwrap();
-            asm.push(reg).unwrap();
-            asm.mov(reg, instr.next_ip()).unwrap();
-            // todo reloc here (maybe need second unused reg)
-            /*
-            asm!(
-            "mov rax, qword ptr gs:[0x60]",
-            "mov {}, [rax + 0x10]",
-            out(reg) current_image_base
-            );
-             */
+            asm.push(regs[0]).unwrap();
+            asm.push(regs[1]).unwrap();
+            asm.mov(regs[0], instr.next_ip() - image_base).unwrap();
+            asm.mov(regs[1], qword_ptr(0x60).gs()).unwrap();
+            asm.mov(regs[1], qword_ptr(regs[1] + 0x10)).unwrap();
+            asm.add(regs[0], regs[1]).unwrap();
+            asm.pop(regs[1]).unwrap();
             //
-            instr.set_memory_base(iced_x86::Register::from(reg));
+            instr.set_memory_base(iced_x86::Register::from(regs[0]));
             asm.add_instruction(instr).unwrap();
-            // find unused register
-            // push unused register to preserve
-            // set unused register to ip
-            // insert code to relocate unused register if needed
-            // insert original instruction and replace rip base reg
-            // with unused register
+            //
+            asm.pop(regs[0]).unwrap();
+
             let instr_buffer = asm.assemble(0).unwrap();
             self.emit_const(instr_buffer.len() as u8);
             self.program.extend_from_slice(&instr_buffer);

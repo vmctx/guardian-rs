@@ -120,14 +120,12 @@ impl Virtualizer {
         let mut jmp_map = HashMap::<u64, usize>::new();
 
         for mut inst in decoder.iter() {
-            if inst.is_ip_rel_memory_operand() { // or if its contained in relocs?
-                // todo check pefile for relocs at inst.ip(), if it has entry
-                // add relocate opcode that pops latest address from stack
-                // relocates it and pushes it back or something like that
-                // https://github.com/layerfsd/phantasm-x86-virtualizer/blob/master/chvrn_vm/relocations.cpp
-                // -
-                // for rip relative just get absolute address?
-            }
+            // todo check pefile for relocs at inst.ip(), if it has entry
+            // add relocate opcode that pops latest address from stack
+            // relocates it and pushes it back or something like that
+            // https://github.com/layerfsd/phantasm-x86-virtualizer/blob/master/chvrn_vm/relocations.cpp
+            // -
+            // for rip relative just get absolute address?
 
             if jmp_map.contains_key(&inst.ip()) {
                 self.asm.patch(*jmp_map.get(&inst.ip()).unwrap() + 3, self.asm.len() as u64);
@@ -181,70 +179,22 @@ impl Virtualizer {
                     }
                 }
                 _ => {
-                    // todo check for all control flow altering instructions and give error
-                    if inst.is_jmp_short() || inst.is_jmp_short_or_near() || inst.is_jmp_near_indirect() || inst.is_jmp_far() || inst.is_jmp_far_indirect() {
+                    // check for all control flow altering instructions and give error
+                    // those i should all as far as possible add support for
+                    // including call
+                    if inst.is_jmp_short() || inst.is_jmp_short_or_near()
+                        || inst.is_jmp_near_indirect() || inst.is_jmp_far()
+                        || inst.is_jmp_far_indirect() {
                         panic!("unsupported");
                     }
 
-                    let mut encoder = Encoder::new(64);
-                    encoder.encode(&inst, inst.ip()).unwrap();
-                    let instr_buffer = encoder.take_buffer();
-                    Disassembler::from_bytes(instr_buffer).disassemble();
-                    if inst.op_kinds().any(|x| x == OpKind::Memory) && inst.is_ip_rel_memory_operand() {
-                        println!("{:x}", inst.memory_displacement32());
-                        // currently i only know how to calculate it if i know the new rip
-                        /*
-                        14800+ 20 = 14820
-                        14000+ 20 = 14020
+                    let image_base = if let Some(pe) = self.pe.as_ref() {
+                        pe.get_image_base().unwrap()
+                    } else {
+                        0
+                    };
 
-                        14800(old_rip) - 14000(rip) = 800 + 14000 (rip)
-
-                        14500+ 20 = 14520
-                        14800+ 20 = 14820
-
-                        14200(old_rip) diff 14800(rip) =  14800 - 600(DIFF)
-                         */
-                        inst.set_memory_displacement32((inst.next_ip() + inst.memory_displacement64()) as u32);
-                        println!("{:x}", inst.memory_displacement32());
-                    }
-
-                    let mut encoder = Encoder::new(64);
-                    encoder.encode(&inst, inst.ip()).unwrap();
-                    let instr_buffer = encoder.take_buffer();
-                    Disassembler::from_bytes(instr_buffer).disassemble();
-                    panic!();
-                    self.asm.vmexec(inst);
-                    /*
-                    let mut output = String::new();
-                    NasmFormatter::new().format(&inst, &mut output);
-                    panic!("unsupported instruction: {}", output);
-                     */
-                    // todo
-                    // emit special vmexit (or just vmexitrenter whatever) opcode
-                    // relocate instruction into bytecode (max instruction size is 15 bytes afaik?)
-                    // so vmreexit (or smthin) relocinstr (instr data (relocated if rip relative)
-                    // vmexit (restore registers)
-                    // executes instr data somehow (alloc rwx or change bytecode protection
-                    // vmreenter with changed registers (maybe without deallocating reallocation
-                    // of stack somehow if possible, but not needed)
-                    // maybe jit assemble it in the vm like
-                    // call vmexit (it will have to restore all registers afaik)
-                    // call should make it return here instead of before original vmenter
-                    // jitasm.insert(unvirt_instr)M
-                    // jitasm.push(self.pc + size_of unvirt instr);
-                    // jitasm.jmp(vmenter);
-                    // jitasm.execute() // allocates rwx region, moves bytes there
-                    // and executes by jmp (original ret addr needs to be saved)
-                    // option 2
-                    // allocate instructions on vmstack ? or allocate buffer
-                    // do the jit assemble above
-                    // set first ret addr to addr of buffer (for vmexit)
-                    // set second to here + size of inst buffer or sumthin
-                    // jmp vmexit (but without dealloc), just restoring rsp etc
-                    // then save regs after jmping back
-                    // -
-                    // it should restore regs, ret to buffer, ret to here, save regs,
-                    // continue execution
+                    self.asm.vmexec(inst, image_base);
                 }
             }
         }
