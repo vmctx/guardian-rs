@@ -1,6 +1,7 @@
 use anyhow::Result;
 use std::ptr::read_unaligned;
 use iced_x86::{Encoder, MemorySize, OpKind};
+use iced_x86::code_asm::CodeAssembler;
 use num_enum::TryFromPrimitiveError;
 
 #[repr(C)]
@@ -121,10 +122,54 @@ impl TryFrom<&iced_x86::Instruction> for OpSize {
                 OpKind::Immediate8to64 => OpSize::Qword,
                 OpKind::Immediate32to64 => OpSize::Qword,
                 OpKind::Immediate64 => OpSize::Qword,
-                _=> panic!("invalid immediate?")
+                _ => panic!("invalid immediate?")
             };
             Ok(value)
         }
+    }
+}
+
+pub trait FreeReg {
+    fn get_free_reg(&self) -> iced_x86::Register;
+}
+
+impl FreeReg for iced_x86::Instruction {
+    fn get_free_reg(&self) -> Option<iced_x86::code_asm::AsmRegister64> {
+        use iced_x86::code_asm::*;
+        let reg_map: &[(&AsmRegister64, iced_x86::Register)] = &[
+            (&rbx, iced_x86::Register::RBX),
+            (&rdx, iced_x86::Register::RDX),
+            (&rsi, iced_x86::Register::RSI),
+            (&rdi, iced_x86::Register::RDI),
+            (&r8, iced_x86::Register::R8),
+            (&r9, iced_x86::Register::R9),
+            (&r10, iced_x86::Register::R10),
+            (&r11, iced_x86::Register::R11),
+            (&r12, iced_x86::Register::R12),
+            (&r13, iced_x86::Register::R13),
+            (&r14, iced_x86::Register::R14),
+            (&r15, iced_x86::Register::R15),
+        ];
+
+        let mut used_regs = Vec::new();
+
+        for op in 0..self.op_count() {
+            if self.op_kind(op) == OpKind::Register {
+                used_regs.push(self.op_register(op));
+            } else if self.op_kind(op) == OpKind::Memory {
+                used_regs.push(self.memory_base());
+                used_regs.push(self.memory_index());
+            }
+        }
+
+        for (free_reg, reg) in reg_map {
+            if !used_regs.contains(reg) {
+                return Some(**free_reg);
+            }
+        }
+
+        // should never be none
+        None
     }
 }
 
@@ -469,13 +514,40 @@ impl Assembler {
         self.emit_const::<u64>(image_base);
     }
 
-    pub fn vmexec(&mut self, instr: iced_x86::Instruction) {
+    pub fn vmexec(&mut self, mut instr: iced_x86::Instruction) {
         self.emit(Opcode::VmExec);
-        let mut encoder = Encoder::new(64);
-        encoder.encode(&instr, instr.ip()).unwrap();
-        let instr_buffer = encoder.take_buffer();
-        self.emit_const(instr_buffer.len() as u8);
-        self.program.extend_from_slice(&instr_buffer);
+        if instr.is_ip_rel_memory_operand() {
+            let mut asm = CodeAssembler::new(64).unwrap();
+            let reg = instr.get_free_reg().unwrap();
+            asm.push(reg).unwrap();
+            asm.mov(reg, instr.next_ip()).unwrap();
+            // todo reloc here (maybe need second unused reg)
+            /*
+            asm!(
+            "mov rax, qword ptr gs:[0x60]",
+            "mov {}, [rax + 0x10]",
+            out(reg) current_image_base
+            );
+             */
+            //
+            instr.set_memory_base(iced_x86::Register::from(reg));
+            asm.add_instruction(instr).unwrap();
+            // find unused register
+            // push unused register to preserve
+            // set unused register to ip
+            // insert code to relocate unused register if needed
+            // insert original instruction and replace rip base reg
+            // with unused register
+            let instr_buffer = asm.assemble(0).unwrap();
+            self.emit_const(instr_buffer.len() as u8);
+            self.program.extend_from_slice(&instr_buffer);
+        } else {
+            let mut encoder = Encoder::new(64);
+            encoder.encode(&instr, instr.ip()).unwrap();
+            let instr_buffer = encoder.take_buffer();
+            self.emit_const(instr_buffer.len() as u8);
+            self.program.extend_from_slice(&instr_buffer);
+        }
     }
 
     pub fn vmexit(&mut self) {

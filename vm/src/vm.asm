@@ -58,9 +58,7 @@ vmentry:
     jmp vmenter
 
 vmenter:
-    // todo save rflags incase of rentering vm, be
-    // aware of instrs modifying rflags
-    // move registers into machines registerswdym
+    // todo save (store) zmm/ymm/xmm for floating point operations
     add rsp, 0x10 // because i didnt pop the bytecode ptr and rflags yet
     mov [rax + {rax}], rax
     mov [rax + {rcx}], rcx
