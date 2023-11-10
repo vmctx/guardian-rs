@@ -1,10 +1,6 @@
-use std::env::current_dir;
 use std::path::PathBuf;
 use std::process::{ExitStatus, Stdio};
-use test_binary::{build_test_binary, TestBinary};
-use obfuscator::virt::machine::disassemble;
-use obfuscator::virt::virtualizer::virtualize;
-
+use test_binary::TestBinary;
 // todo write test cases to verify instruction generate
 // correct opcodes (size etc)
 
@@ -66,7 +62,7 @@ fn build_and_run(binary_name: &str) -> (String, ExitStatus) {
 }
 
 fn run_binary(binary_name: &str) -> (String, ExitStatus) {
-    let mut test_bin_subproc = std::process::Command::new(binary_name)
+    let test_bin_subproc = std::process::Command::new(binary_name)
         .stdout(Stdio::piped())
         .spawn().expect("error running test binary");
 

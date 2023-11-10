@@ -6,19 +6,21 @@
 extern crate alloc;
 
 use alloc::alloc::dealloc;
-use alloc::vec;
 use alloc::vec::Vec;
 use core::alloc::Layout;
 use core::arch::asm;
 use core::convert::TryFrom;
-use core::mem::forget;
 use core::mem::size_of;
 use core::ops::BitXor;
-use core::ptr::read_unaligned;
 use core::slice;
-use memoffset::offset_of;
 
+use memoffset::offset_of;
 use x86::bits64::rflags::RFlags;
+
+use crate::allocator::Protection;
+use crate::assembler::{Asm, Imm64, Reg64};
+use crate::assembler::prelude::{Mov, Pop, Push};
+use crate::assembler::Reg64::*;
 
 #[cfg(not(feature = "testing"))]
 #[panic_handler]
@@ -185,11 +187,6 @@ macro_rules! rotate {
 }
 
 pub(crate) use rotate;
-use crate::allocator::Protection;
-use crate::assembler::{Asm, Imm64, Reg64};
-use crate::assembler::prelude::{Add, Call, Jmp, Mov, Pop, Push};
-use crate::assembler::Reg64::*;
-use crate::syscalls::NtProtectVirtualMemory;
 
 #[repr(u8)]
 #[derive(Debug, Copy, Clone, num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
@@ -238,6 +235,8 @@ impl Machine {
     #[cfg(feature = "testing")]
     #[allow(clippy::fn_to_numeric_cast)]
     pub fn new(program: *const u8) -> anyhow::Result<Self> {
+        use alloc::vec;
+        use core::mem::forget;
         use iced_x86::code_asm::*;
 
         let mut vmstack = vec![0u64; VM_STACK_SIZE];
@@ -374,8 +373,8 @@ impl Machine {
 
         let mut instructions = Vec::from_raw_parts(
             allocator::allocate_protected(
-                Layout::new::<[u8; 0x1000]>(), Protection::ReadWriteExecute
-            ), 0, 0x1000
+                Layout::new::<[u8; 0x1000]>(), Protection::ReadWriteExecute,
+            ), 0, 0x1000,
         );
 
         // todo recode flags to calculate instead, cuz it can cause ub when
@@ -437,9 +436,9 @@ impl Machine {
                     let current_image_base;
 
                     asm!(
-                        "mov rax, qword ptr gs:[0x60]",
-                        "mov {}, [rax + 0x10]",
-                        out(reg) current_image_base
+                    "mov rax, qword ptr gs:[0x60]",
+                    "mov {}, [rax + 0x10]",
+                    out(reg) current_image_base
                     );
 
                     let addr = self.stack_pop::<u64>()
