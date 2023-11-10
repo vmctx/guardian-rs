@@ -14,24 +14,19 @@ path = "src/lib.rs"
 
 
 [dependencies]
-libc = { version = "0.2.149", default-features = false }
-bitflags = "2.4.0"
 static_assertions = "1.1.0"
-anyhow = { workspace = true, optional = true }
 num_enum.workspace = true
 memoffset.workspace = true
 x86.workspace = true
-syscalls = { path = "../../reddeadonline/crates/syscalls", default-features =  false, features = ["direct"] }
-#
 winapi = { version = "0.3.9", default-features = false, features = ["ntdef", "basetsd", "winnt"] }
-ntapi = { version = "0.4.0", default-features = false }
 hashbrown = "0.14.1"
 # only testing
+anyhow = { workspace = true, optional = true }
 region = { version = "3.0.0", optional = true }
 iced-x86 = { workspace = true, optional = true }
 
 [dev-dependencies]
-obfuscator = { path= "../obfuscator" }
+obfuscator = { path = "../obfuscator" }
 
 [features]
 default = []

@@ -6,8 +6,6 @@ members = [
 ]
 
 [workspace.dependencies]
-# virtualizer
-#
 x86 = "0.52.0"
 symbolic-common = "12.4.1"
 symbolic-demangle = "12.4.1"

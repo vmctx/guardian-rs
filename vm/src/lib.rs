@@ -29,7 +29,6 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
 #[cfg(not(feature = "testing"))]
 mod crt;
 mod handlers;
-// mod region;
 
 const VM_STACK_SIZE: usize = 0x1000;
 const CPU_STACK_SIZE: usize = 0x2000;
@@ -186,6 +185,7 @@ macro_rules! rotate {
 }
 
 pub(crate) use rotate;
+use crate::allocator::Protection;
 use crate::assembler::{Asm, Imm64, Reg64};
 use crate::assembler::prelude::{Add, Call, Jmp, Mov, Pop, Push};
 use crate::assembler::Reg64::*;
@@ -373,7 +373,9 @@ impl Machine {
             .add((VM_STACK_SIZE - 0x100 - size_of::<u64>()) / size_of::<*mut u64>());
 
         let mut instructions = Vec::from_raw_parts(
-            allocator::allocate(Layout::new::<[u8; 0x1000]>()), 0, 0x1000,
+            allocator::allocate_protected(
+                Layout::new::<[u8; 0x1000]>(), Protection::ReadWriteExecute
+            ), 0, 0x1000
         );
 
         // todo recode flags to calculate instead, cuz it can cause ub when
@@ -526,10 +528,12 @@ pub fn reloc_instr(vm: &mut Machine, instr_size: usize, instr_buffer: &mut Vec<u
         asm.mov(**reg, assembler::MemOp::IndirectDisp(rcx, offset as i32));
     }
 
-    asm.mov(rcx, assembler::MemOp::IndirectDisp(rcx, (offset_of!(Machine, regs) + Register::Rcx as u8 as usize * 8) as i32));
+    asm.mov(rcx, assembler::MemOp::IndirectDisp(rcx, (
+        offset_of!(Machine, regs) + Register::Rcx as u8 as usize * 8
+    ) as i32));
 
-    let slice = unsafe { slice::from_raw_parts(vm.pc, instr_size) };
-    asm.code().extend_from_slice(slice);
+    let instructions = unsafe { slice::from_raw_parts(vm.pc, instr_size) };
+    asm.code().extend_from_slice(instructions);
 
     asm.push(rax); // this decreases rsp need to adjust
     asm.mov(rax, Imm64::from(vm as *mut _ as u64));
@@ -570,19 +574,6 @@ pub fn reloc_instr(vm: &mut Machine, instr_size: usize, instr_buffer: &mut Vec<u
         asm.mov(**reg, assembler::MemOp::IndirectDisp(rax, offset as i32));
     }
     asm.ret();
-
-    let mut address = instr_buffer.as_mut_ptr() as usize;
-    let mut size = instr_buffer.len();
-    let mut old_protect = 0;
-    unsafe {
-        NtProtectVirtualMemory(
-            -1isize as *mut winapi::ctypes::c_void,
-            &mut address as *mut usize as _,
-            &mut size,
-            0x40, // rwx
-            &mut old_protect, // page RW
-        );
-    }
 
     let func = unsafe { core::mem::transmute::<_, extern "C" fn(*mut Machine)>(instr_buffer.as_mut_ptr()) };
     func(vm);
