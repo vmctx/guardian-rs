@@ -20,7 +20,7 @@ impl Reloc for iced_x86::Instruction {
 
         let instr_rva = (self.ip() - pe_image_base) as u32;
         relocations.iter().find(|(rva, _) | {
-            *rva.0 >= instr_rva && *rva.0 < instr_rva + self.len() as u32
+            rva.0 >= instr_rva && rva.0 < instr_rva + self.len() as u32
         }).is_some()
     }
 }
@@ -113,6 +113,7 @@ macro_rules! sized_op {
 struct Virtualizer {
     asm: Assembler,
     pe: Option<VecPE>,
+    image_base: u64,
 }
 
 impl Virtualizer {
@@ -120,12 +121,15 @@ impl Virtualizer {
         Self {
             asm: Assembler::default(),
             pe: None,
+            image_base: 0,
         }
     }
 
     pub fn with_pe(pe: VecPE) -> Self {
         Self {
             asm: Assembler::default(),
+            image_base: pe.get_image_base()
+                .expect("invalid pe file"),
             pe: Some(pe),
         }
     }
@@ -499,10 +503,7 @@ impl Asm for Virtualizer {
         }
 
         if inst.op_kind(0) != OpKind::Memory && inst.has_reloc_entry(self.pe.as_ref()) {
-            self.asm.vmreloc(self.pe.as_ref()
-                .expect("rip relative instr but pe is none")
-                .get_image_base().unwrap()
-            );
+            self.asm.vmreloc(self.image_base);
         }
     }
 
@@ -570,10 +571,7 @@ impl Asm for Virtualizer {
     fn lea_operand(&mut self, inst: &Instruction) {
         if inst.memory_base() == iced_x86::Register::RIP {
             self.const_(inst.next_ip());
-            self.asm.vmreloc(self.pe.as_ref()
-                .expect("rip relative instr but pe is none")
-                .get_image_base().unwrap()
-            );
+            self.asm.vmreloc(self.image_base);
         } else if inst.memory_base() != iced_x86::Register::None {
             self.load_reg(inst.memory_base());
         }

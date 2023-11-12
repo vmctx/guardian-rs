@@ -1,6 +1,6 @@
 use anyhow::Result;
 use std::ptr::read_unaligned;
-use iced_x86::{Encoder, MemorySize, OpKind};
+use iced_x86::{Encoder, InstructionInfoFactory, MemorySize, OpKind};
 use iced_x86::code_asm::{CodeAssembler, qword_ptr};
 use num_enum::TryFromPrimitiveError;
 
@@ -151,15 +151,13 @@ impl FreeReg for iced_x86::Instruction {
             (&r15, iced_x86::Register::R15),
         ];
 
+        let mut instr_info_factory = InstructionInfoFactory::new();
+        let instr_info = instr_info_factory.info(self);
+
         let mut used_regs = Vec::new();
 
-        for op in 0..self.op_count() {
-            if self.op_kind(op) == OpKind::Register {
-                used_regs.push(self.op_register(op));
-            } else if self.op_kind(op) == OpKind::Memory {
-                used_regs.push(self.memory_base());
-                used_regs.push(self.memory_index());
-            }
+        for register in instr_info.used_registers() {
+            used_regs.push(register.register());
         }
 
         let mut free_regs = Vec::with_capacity(reg_map.len());
@@ -268,7 +266,7 @@ impl Instruction {
     pub fn length(&self) -> usize {
         let mut length = 2; // opcode + opsize
         length += match self.op_code {
-            Opcode::Const => {
+            Opcode::Const | Opcode::VmReloc => {
                 self.op_size as u8 as usize
             }
             Opcode::Jmp => {
