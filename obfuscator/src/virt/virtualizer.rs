@@ -192,9 +192,7 @@ impl Virtualizer {
             }
         }
 
-        if unresolved_jmps != 0 {
-            panic!("{} unresolved jmps", unresolved_jmps);
-        }
+        assert_eq!(unresolved_jmps, 0, "unresolved jumps");
 
         self.asm.assemble()
     }

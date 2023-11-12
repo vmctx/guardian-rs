@@ -334,6 +334,11 @@ pub enum Register {
 
 impl From<iced_x86::Register> for Register {
     fn from(reg: iced_x86::Register) -> Self {
+        // reg.full_register() and exclude rip?
+        // maybe when i add xmm/ymm/zmm support
+        // probably only support xmm (128 bit) 0-15
+        // will have to see maybe dont allocate struct on stack
+        // but its better to
         match reg {
             iced_x86::Register::RAX => Register::Rax,
             iced_x86::Register::RBX => Register::Rbx,
