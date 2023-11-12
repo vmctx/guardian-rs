@@ -135,40 +135,31 @@ pub trait FreeReg {
 
 impl FreeReg for iced_x86::Instruction {
     fn get_free_regs(&self) -> Vec<iced_x86::code_asm::AsmRegister64> {
-        use iced_x86::code_asm::*;
-        let reg_map: &[(&AsmRegister64, iced_x86::Register)] = &[
-            (&rbx, iced_x86::Register::RBX),
-            (&rdx, iced_x86::Register::RDX),
-            (&rsi, iced_x86::Register::RSI),
-            (&rdi, iced_x86::Register::RDI),
-            (&r8, iced_x86::Register::R8),
-            (&r9, iced_x86::Register::R9),
-            (&r10, iced_x86::Register::R10),
-            (&r11, iced_x86::Register::R11),
-            (&r12, iced_x86::Register::R12),
-            (&r13, iced_x86::Register::R13),
-            (&r14, iced_x86::Register::R14),
-            (&r15, iced_x86::Register::R15),
+        use iced_x86::code_asm::get_gpr64;
+
+        let reg_map: &[iced_x86::Register] = &[
+            iced_x86::Register::RBX,
+            iced_x86::Register::RDX,
+            iced_x86::Register::RSI,
+            iced_x86::Register::RDI,
+            iced_x86::Register::R8,
+            iced_x86::Register::R9,
+            iced_x86::Register::R10,
+            iced_x86::Register::R11,
+            iced_x86::Register::R12,
+            iced_x86::Register::R13,
+            iced_x86::Register::R14,
+            iced_x86::Register::R15,
         ];
 
         let mut instr_info_factory = InstructionInfoFactory::new();
         let instr_info = instr_info_factory.info(self);
 
-        let mut used_regs = Vec::new();
+        let used_regs = instr_info.used_registers().iter()
+            .map(|reg| reg.register()).collect::<Vec<iced_x86::Register>>();
 
-        for register in instr_info.used_registers() {
-            used_regs.push(register.register());
-        }
-
-        let mut free_regs = Vec::with_capacity(reg_map.len());
-
-        for (free_reg, reg) in reg_map {
-            if !used_regs.contains(reg) {
-                free_regs.push(**free_reg);
-            }
-        }
-
-        free_regs
+        reg_map.iter().filter(|reg| !used_regs.contains(reg))
+            .map(|reg| get_gpr64(*reg).unwrap()).collect()
     }
 }
 
