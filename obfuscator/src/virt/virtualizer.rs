@@ -1,9 +1,29 @@
 use std::collections::HashMap;
-use exe::{PE, VecPE};
+use exe::{PE, RelocationDirectory, RVA, VecPE};
 use crate::virt::machine::{Machine, Assembler, Register, JmpCond, OpSized, OpSize, HigherLower8Bit, RegUp};
 use iced_x86::{Decoder, Encoder, Formatter, Instruction, Mnemonic, NasmFormatter, OpKind};
 use memoffset::offset_of;
 use crate::diassembler::Disassembler;
+
+trait Reloc {
+    fn has_reloc_entry(&self, pe: Option<&VecPE>) -> bool;
+}
+
+impl Reloc for iced_x86::Instruction {
+    fn has_reloc_entry(&self, pe: Option<&VecPE>) -> bool {
+        let Some(pe) = pe else { return false; };
+        let pe_image_base = pe.get_image_base().unwrap();
+
+        let relocation_table = RelocationDirectory::parse(pe).unwrap();
+        let relocations = relocation_table.relocations(pe, pe_image_base)
+            .unwrap();
+
+        let instr_rva = (self.ip() - pe_image_base) as u32;
+        relocations.iter().find(|(rva, _) | {
+            *rva.0 >= instr_rva && *rva.0 < instr_rva + self.len() as u32
+        }).is_some()
+    }
+}
 
 trait Asm {
     fn const_<T: OpSized>(&mut self, v: T);
@@ -461,8 +481,6 @@ impl Asm for Virtualizer {
     }
 
     fn load_operand(&mut self, inst: &Instruction, operand: u32) {
-        // todo check pefile for relocs at inst.ip() if its immediate, if it has entry
-        // emit vmreloc opcode
         match inst.op_kind(operand) {
             OpKind::Register => self.load_reg(inst.op_register(operand)),
             OpKind::Memory => {
@@ -478,6 +496,13 @@ impl Asm for Virtualizer {
             OpKind::Immediate32to64 => self.const_(inst.immediate32to64() as u64),
             OpKind::Immediate64 => self.const_(inst.immediate64()),
             _ => panic!("unsupported operand: {:?}", inst.op_kind(operand)),
+        }
+
+        if inst.op_kind(0) != OpKind::Memory && inst.has_reloc_entry(self.pe.as_ref()) {
+            self.asm.vmreloc(self.pe.as_ref()
+                .expect("rip relative instr but pe is none")
+                .get_image_base().unwrap()
+            );
         }
     }
 
@@ -563,9 +588,6 @@ impl Asm for Virtualizer {
             }
         }
 
-        // todo check if it has reloc entry and relocate if it does
-        // check if theres a reloc entry for this instruction, if there is emit
-        // vmrebase opcode (tba, see above)
         self.asm.const_(inst.memory_displacement64());
 
         if inst.memory_base() != iced_x86::Register::None
