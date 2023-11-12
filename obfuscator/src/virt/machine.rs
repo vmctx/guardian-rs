@@ -394,7 +394,7 @@ impl From<iced_x86::Register> for Register {
             iced_x86::Register::SIL => Register::Rsi,
             iced_x86::Register::DIL => Register::Rdi,
             iced_x86::Register::SPL => Register::Rsp,
-            iced_x86::Register::BPL => Register::Rbx,
+            iced_x86::Register::BPL => Register::Rbp,
             iced_x86::Register::R8L => Register::R8,
             iced_x86::Register::R9L => Register::R9,
             iced_x86::Register::R10L => Register::R10,

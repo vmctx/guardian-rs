@@ -120,13 +120,6 @@ impl Virtualizer {
         let mut jmp_map = HashMap::<u64, usize>::new();
 
         for mut inst in decoder.iter() {
-            // todo check pefile for relocs at inst.ip(), if it has entry
-            // add relocate opcode that pops latest address from stack
-            // relocates it and pushes it back or something like that
-            // https://github.com/layerfsd/phantasm-x86-virtualizer/blob/master/chvrn_vm/relocations.cpp
-            // -
-            // for rip relative just get absolute address?
-
             if jmp_map.contains_key(&inst.ip()) {
                 self.asm.patch(*jmp_map.get(&inst.ip()).unwrap() + 3, self.asm.len() as u64);
                 jmp_map.remove(&inst.ip()).unwrap();
@@ -470,6 +463,8 @@ impl Asm for Virtualizer {
     }
 
     fn load_operand(&mut self, inst: &Instruction, operand: u32) {
+        // todo check pefile for relocs at inst.ip() if its immediate, if it has entry
+        // emit vmreloc opcode
         match inst.op_kind(operand) {
             OpKind::Register => self.load_reg(inst.op_register(operand)),
             OpKind::Memory => {
