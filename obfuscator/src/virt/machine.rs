@@ -10,7 +10,8 @@ pub struct Machine {
     pub(crate) sp: *mut u64,
     pub regs: [u64; 16],
     pub rflags: u64,
-    pub(crate) vmstack: Vec<u64>,
+    pub vmstack: *mut u64,
+    pub cpustack: *mut u8,
 }
 
 #[repr(u8)]

@@ -87,12 +87,7 @@ macro_rules! binary_op {
             load_operand, $inst, 0;
             load_operand, $inst, 1;
         );
-        match OpSize::try_from($inst).unwrap() {
-            OpSize::Byte => vmasm!($self, $op::<u8>;),
-            OpSize::Word => vmasm!($self, $op::<u16>;),
-            OpSize::Dword => vmasm!($self, $op::<u32>;),
-            OpSize::Qword => vmasm!($self, $op::<u64>;)
-        }
+        sized_op!($self, $op, $inst);
         vmasm!($self,
             store_operand, $inst, 0;
         );
@@ -100,7 +95,7 @@ macro_rules! binary_op {
 }
 
 macro_rules! sized_op {
-    ($self:ident, $inst:ident, $op:ident) => {{
+    ($self:ident, $op:ident, $inst:ident) => {{
         match OpSize::try_from($inst).unwrap() {
             OpSize::Byte => vmasm!($self, $op::<u8>;),
             OpSize::Word => vmasm!($self, $op::<u16>;),
@@ -343,7 +338,7 @@ impl Virtualizer {
 
     fn not(&mut self, inst: &Instruction) {
         vmasm!(self,load_operand, inst, 0;);
-        sized_op!(self, inst, not);
+        sized_op!(self, not, inst);
         vmasm!(self,store_operand, inst, 0;);
     }
 
@@ -352,7 +347,7 @@ impl Virtualizer {
             load_operand, inst, 0;
             load_operand, inst, 1;
         );
-        sized_op!(self, inst, cmp);
+        sized_op!(self, cmp, inst);
     }
 
     // seems to be correct
@@ -394,7 +389,7 @@ impl Virtualizer {
             load_operand, inst, 0;
             load_reg, RSP;
         );
-        sized_op!(self, inst, store);
+        sized_op!(self, store, inst);
     }
 
     fn pop(&mut self, inst: &Instruction) {
@@ -403,7 +398,7 @@ impl Virtualizer {
         vmasm!(self,
             load_reg, RSP;
         );
-        sized_op!(self, inst, load);
+        sized_op!(self, load, inst);
         vmasm!(self,
             store_operand, inst, 0;
 
@@ -489,7 +484,7 @@ impl Asm for Virtualizer {
             OpKind::Register => self.load_reg(inst.op_register(operand)),
             OpKind::Memory => {
                 self.lea_operand(inst);
-                sized_op!(self, inst, load);
+                sized_op!(self, load, inst);
             }
             OpKind::Immediate8 => self.const_(inst.immediate8()),
             OpKind::Immediate8to16 => self.const_(inst.immediate8to16() as u16),
@@ -512,7 +507,7 @@ impl Asm for Virtualizer {
             OpKind::Register => self.store_reg(inst.op_register(operand)),
             OpKind::Memory => {
                 self.lea_operand(inst);
-                sized_op!(self, inst, store);
+                sized_op!(self, store, inst);
             }
             _ => panic!("unsupported operand"),
         }
