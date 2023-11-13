@@ -48,7 +48,6 @@ mod tests {
         assert_eq!(f(0x1111222233334444), 0x1111222233337777);
     }
 
-
     #[test]
     #[cfg(target_env = "msvc")]
     fn virtualize_variable_mutation() {
