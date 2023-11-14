@@ -359,7 +359,7 @@ impl Machine {
     unsafe fn stack_pop<T: Sized>(&mut self) -> T {
         assert_eq!(size_of::<T>() % 2, 0);
         let value = self.sp.cast::<T>().read_unaligned();
-        //*self.sp.cast::<T>() = null();
+        *self.sp.cast::<T>() = core::mem::zeroed();
         self.sp = self.sp.cast::<T>().add(1) as _;
         value
     }
