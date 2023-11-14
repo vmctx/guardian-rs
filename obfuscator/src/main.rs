@@ -1,5 +1,4 @@
-use std::path::PathBuf;
-use obfuscator::virtualize_file;
+use obfuscator::Obfuscator;
 
 mod diassembler;
 mod pe;
@@ -11,10 +10,11 @@ mod virt;
 
 
 fn main() {
-   virtualize_file(
-      "../hello_world/target/release/hello_world.exe",
-      "../hello_world/target/release/hello_world.map",
-      "../hello_world/target/release/hello_world_modded.exe",
-      vec!["hello_world::calc".to_string()]
-   )
+   let mut obfuscator = Obfuscator::new(
+      "../hello_world/target/release/hello_world.exe".to_string(),
+      "../hello_world/target/release/hello_world_modded.exe".to_string()
+   ).unwrap().with_map_file("../hello_world/target/release/hello_world.map".to_string());
+   obfuscator.add_functions( vec!["hello_world::calc".to_string()]).unwrap();
+
+   obfuscator.virtualize();
 }

@@ -200,13 +200,7 @@ impl Virtualizer {
                         panic!("unsupported");
                     }
 
-                    let image_base = if let Some(pe) = self.pe.as_ref() {
-                        pe.get_image_base().unwrap()
-                    } else {
-                        0
-                    };
-
-                    self.asm.vmexec(inst, image_base);
+                    self.asm.vmexec(inst, self.image_base);
                 }
             }
         }

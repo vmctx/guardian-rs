@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::process::{ExitStatus, Stdio};
 use test_binary::TestBinary;
+use obfuscator::Obfuscator;
 // todo write test cases to verify instruction generate
 // correct opcodes (size etc)
 
@@ -42,12 +43,12 @@ fn binary_two_functions() {
 
 
 fn virtualize_and_run(binary_name: &str, functions: Vec<String>) -> (String, ExitStatus) {
-    obfuscator::virtualize_file(
-        format!("testbins\\{binary_name}\\target\\release\\{binary_name}.exe").as_str(),
-        format!("testbins\\{binary_name}\\target\\{binary_name}.map").as_str(),
-        format!("testbins\\{binary_name}\\target\\release\\{binary_name}_vrt.exe").as_str(),
-        functions
-    );
+    let mut obfuscator = Obfuscator::new(
+        format!("testbins\\{binary_name}\\target\\release\\{binary_name}.exe"),
+        format!("testbins\\{binary_name}\\target\\release\\{binary_name}_vrt.exe")
+    ).unwrap().with_map_file(format!("testbins\\{binary_name}\\target\\{binary_name}.map"));
+    obfuscator.add_functions(functions).unwrap();
+    obfuscator.virtualize();
 
     run_binary(&format!("testbins\\{binary_name}\\target\\release\\{binary_name}_vrt.exe"))
 }
