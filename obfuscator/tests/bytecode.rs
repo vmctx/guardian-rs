@@ -18,7 +18,7 @@ fn virtualize_push_pop() {
     // todo constq rsi = 69, fix that maybe in the disassembler
     assert_eq!(bytecode.as_str(), "\
     0: VmctxQ\n2: ConstQ Rsp\nc: VmAddQ\ne: LoadQ\n10: ConstQ 8\n1a: VmSubQ\n1c: VmctxQ\n1e: ConstQ Rsp\n28: VmAddQ\n2a: StoreRegQ\
-    \n2c: ConstQ Rsi\n36: VmctxQ\n38: ConstQ Rsp\n42: VmAddQ\n44: LoadQ\n46: StoreQ\
+    \n2c: ConstQ 69\n36: VmctxQ\n38: ConstQ Rsp\n42: VmAddQ\n44: LoadQ\n46: StoreQ\
     \n48: VmctxQ\n4a: ConstQ Rcx\n54: VmAddQ\n56: LoadQ\
     \n58: VmctxQ\n5a: ConstQ Rax\n64: VmAddQ\n66: StoreRegQ\
     \n68: VmctxQ\n6a: ConstQ Rsp\n74: VmAddQ\n76: LoadQ\n78: LoadQ\

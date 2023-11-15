@@ -227,8 +227,8 @@ impl Machine {
             sp: core::ptr::null_mut(),
             regs: [0; 16],
             rflags: 0,
-            vmstack: allocator::allocate(Layout::new::<[u64; VM_STACK_SIZE]>()).cast(),
-            cpustack: allocator::allocate(Layout::new::<[u8; CPU_STACK_SIZE]>()),
+            vmstack: allocator::allocate(Layout::new::<[u64; VM_STACK_SIZE]>(), Protection::ReadWrite).cast(),
+            cpustack: allocator::allocate(Layout::new::<[u8; CPU_STACK_SIZE]>(), Protection::ReadWrite),
         }
     }
 
@@ -305,19 +305,19 @@ impl Machine {
         let regmap: &[(&AsmRegister64, u8)] = &[
             (&rax, Register::Rax.into()),
             (&rdx, Register::Rdx.into()),
-            // (&rbx, Register::Rbx.into()),
+            (&rbx, Register::Rbx.into()),
             (&rsp, Register::Rsp.into()), // change back to old stack from cpustack
-            // (&rbp, Register::Rbp.into()),
-            // (&rsi, Register::Rsi.into()),
-            // (&rdi, Register::Rdi.into()),
+            (&rbp, Register::Rbp.into()),
+            (&rsi, Register::Rsi.into()),
+            (&rdi, Register::Rdi.into()),
             (&r8, Register::R8.into()),
             (&r9, Register::R9.into()),
             (&r10, Register::R10.into()),
             (&r11, Register::R11.into()),
-            // (&r12, Register::R12.into()),
-            // (&r13, Register::R13.into()),
-            // (&r14, Register::R14.into()),
-            // (&r15, Register::R15.into()),
+            (&r12, Register::R12.into()),
+            (&r13, Register::R13.into()),
+            (&r14, Register::R14.into()),
+            (&r15, Register::R15.into()),
             (&rcx, Register::Rcx.into()),
         ];
 
@@ -372,7 +372,7 @@ impl Machine {
             .add((VM_STACK_SIZE - 0x100 - size_of::<u64>()) / size_of::<*mut u64>());
 
         let mut instructions = Vec::from_raw_parts(
-            allocator::allocate_protected(
+            allocator::allocate(
                 Layout::new::<[u8; 0x1000]>(), Protection::ReadWriteExecute,
             ), 0, 0x1000,
         );

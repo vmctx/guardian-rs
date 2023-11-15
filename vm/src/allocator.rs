@@ -10,10 +10,11 @@ const NT_CURRENT_PROCESS: *mut c_void = -1isize as *mut c_void;
 
 #[repr(u32)]
 pub enum Protection {
+    ReadWrite = 0x4,
     ReadWriteExecute = 0x40,
 }
 
-pub unsafe fn allocate(layout: Layout) -> *mut u8 {
+pub unsafe fn allocate(layout: Layout, protection: Protection) -> *mut u8 {
     let mut address: usize = 0;
     let mut size = layout.size();
     NtAllocateVirtualMemory(
@@ -22,21 +23,7 @@ pub unsafe fn allocate(layout: Layout) -> *mut u8 {
         0,
         &mut size,
         0x1000 | 0x2000, // commit | reserve
-        0x4,             // page RW
-    );
-    address as *mut u8
-}
-
-pub unsafe fn allocate_protected(layout: Layout, protection: Protection) -> *mut u8 {
-    let mut address: usize = 0;
-    let mut size = layout.size();
-    NtAllocateVirtualMemory(
-        NT_CURRENT_PROCESS,
-        &mut address as *mut usize as _,
-        0,
-        &mut size,
-        0x1000 | 0x2000,   // commit | reserve
-        protection as u32, // page RW
+        protection as u32,
     );
     address as *mut u8
 }
@@ -55,7 +42,7 @@ pub unsafe fn deallocate(ptr: *mut u8, layout: Layout) {
 unsafe impl GlobalAlloc for Allocator {
     #[inline]
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        allocate(layout)
+        allocate(layout, Protection::ReadWrite)
     }
 
     #[inline]

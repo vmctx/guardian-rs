@@ -24,7 +24,7 @@ pub enum OpSize {
 }
 
 #[repr(u8)]
-#[derive(PartialEq)]
+#[derive(PartialEq, Copy, Clone)]
 #[derive(Debug, num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
 pub enum Opcode {
     Const,
@@ -567,6 +567,8 @@ pub fn disassemble(program: &[u8]) -> Result<String> {
     let mut s = String::new();
     let mut pc = program.as_ptr();
 
+    let mut last_instr = None;
+
     while pc < program.as_ptr_range().end {
         let instruction = unsafe { Instruction::from_ptr(pc) }.unwrap();
 
@@ -580,16 +582,21 @@ pub fn disassemble(program: &[u8]) -> Result<String> {
 
         #[allow(clippy::single_match)]
         match instruction.op_code {
-            Opcode::Const => unsafe {
+            Opcode::Const => 'label: {
                 //let v = *(pc as *const u64);
                 let value = instruction.value.unwrap();
 
-                if let Ok(reg) = Register::try_from((value.wrapping_sub(16)) as u8 / 8) {
-                    s.push_str(format!(" {:?}", reg).as_str());
-                } else {
-                    s.push_str(format!(" {}", value).as_str());
+                if let Some(last_instr) = last_instr {
+                    if last_instr == Opcode::Vmctx {
+                        if let Ok(reg) = Register::try_from((value.wrapping_sub(16)) as u8 / 8) {
+                            s.push_str(format!(" {:?}", reg).as_str());
+                            break 'label;
+                        }
+                    }
                 }
-            },
+
+                s.push_str(format!(" {}", value).as_str());
+            }
             Opcode::Jmp => unsafe {
                 let cond = JmpCond::try_from(read_unaligned(pc.add(2))).unwrap();
                 let val = instruction.value.unwrap();
@@ -602,8 +609,8 @@ pub fn disassemble(program: &[u8]) -> Result<String> {
             _ => {}
         }
 
+        last_instr = Some(instruction.op_code);
         pc = unsafe { pc.add(instruction.length()) };
-
         s.push('\n');
     }
 

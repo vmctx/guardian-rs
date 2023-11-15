@@ -1,13 +1,8 @@
 use obfuscator::Obfuscator;
 
-mod diassembler;
-mod pe;
-mod virt;
-
 // virtualization of code that is in between a call of function like begin_virtualization and end_virtualization
 // which are imported from a stub dll, the code is virtualized, a machine is created from the virtual code and the
 // original code segment is replaced by the vmentry of the machine
-
 
 fn main() {
    let mut obfuscator = Obfuscator::new(

@@ -138,7 +138,7 @@ impl Virtualizer {
         let mut unresolved_jmps = 0;
         let mut jmp_map = HashMap::<u64, usize>::new();
 
-        for mut inst in decoder.iter() {
+        for inst in decoder.iter() {
             if jmp_map.contains_key(&inst.ip()) {
                 self.asm.patch(*jmp_map.get(&inst.ip()).unwrap() + 3, self.asm.len() as u64);
                 jmp_map.remove(&inst.ip()).unwrap();
