@@ -114,6 +114,27 @@ pub enum Register {
     R15,
 }
 
+#[repr(u8)]
+#[derive(num_enum::IntoPrimitive)]
+pub enum XmmRegister {
+    Xmm0,
+    Xmm1,
+    Xmm2,
+    Xmm3,
+    Xmm4,
+    Xmm5,
+    Xmm6,
+    Xmm7,
+    Xmm8,
+    Xmm9,
+    Xmm10,
+    Xmm11,
+    Xmm12,
+    Xmm13,
+    Xmm14,
+    Xmm15,
+}
+
 macro_rules! binary_op {
     ($self:ident, $op:ident) => {{
         let (op2, op1) = unsafe { ($self.stack_pop::<u64>(), $self.stack_pop::<u64>()) };
@@ -197,11 +218,12 @@ pub enum OpSize {
     Qword = 8,
 }
 
-#[repr(C)]
+#[repr(C, align(16))]
 pub struct Machine {
     pc: *const u8,
     sp: *mut u64,
     pub regs: [u64; 16],
+    fxsave: XSaveMin,
     rflags: u64,
     vmstack: *mut u64,
     #[cfg(not(feature = "testing"))]
@@ -212,9 +234,18 @@ pub struct Machine {
     pub vmenter: region::Allocation,
 }
 
+#[repr(C, align(16))]
+pub struct XSaveMin {
+    float_registers: [u128; 8],
+    #[cfg(target_pointer_width = "64")]
+    xmm_registers: [u128; 16],
+    #[cfg(target_pointer_width = "32")]
+    xmm_registers: [u128; 8],
+}
+
 // check why anything bigger than this causes issues with my example program
 #[cfg(not(feature = "testing"))]
-static_assertions::const_assert_eq!(core::mem::size_of::<Machine>(), 0xa8);
+static_assertions::const_assert_eq!(core::mem::size_of::<Machine>() % 16, 0);
 
 impl Machine {
     #[no_mangle]
@@ -226,6 +257,7 @@ impl Machine {
             pc: core::ptr::null(),
             sp: core::ptr::null_mut(),
             regs: [0; 16],
+            fxsave: core::mem::zeroed::<XSaveMin>(),
             rflags: 0,
             vmstack: allocator::allocate(Layout::new::<[u64; VM_STACK_SIZE]>(), Protection::ReadWrite).cast(),
             cpustack: allocator::allocate(Layout::new::<[u8; CPU_STACK_SIZE]>(), Protection::ReadWrite),
@@ -245,6 +277,7 @@ impl Machine {
             pc: core::ptr::null(),
             sp: core::ptr::null_mut(),
             regs: [0; 16],
+            fxsave: unsafe { core::mem::zeroed::<XSaveMin>() },
             rflags: 0,
             vmstack: vmstack.as_mut_ptr(),
             cpustack: vec![0u8; CPU_STACK_SIZE],
@@ -298,6 +331,32 @@ impl Machine {
         a.mov(rsp, vm_rsp).unwrap();
 
         a.mov(rcx, rax).unwrap();
+
+        let xmm_regmap: &[(&AsmRegisterXmm, u8)] = &[
+            (&xmm0, XmmRegister::Xmm0.into()),
+            (&xmm1, XmmRegister::Xmm1.into()),
+            (&xmm2, XmmRegister::Xmm2.into()),
+            (&xmm3, XmmRegister::Xmm3.into()),
+            (&xmm4, XmmRegister::Xmm4.into()),
+            (&xmm5, XmmRegister::Xmm5.into()),
+            (&xmm6, XmmRegister::Xmm6.into()),
+            (&xmm7, XmmRegister::Xmm7.into()),
+            (&xmm8, XmmRegister::Xmm8.into()),
+            (&xmm9, XmmRegister::Xmm9.into()),
+            (&xmm10, XmmRegister::Xmm10.into()),
+            (&xmm11, XmmRegister::Xmm11.into()),
+            (&xmm12, XmmRegister::Xmm12.into()),
+            (&xmm13, XmmRegister::Xmm13.into()),
+            (&xmm14, XmmRegister::Xmm14.into()),
+            (&xmm15, XmmRegister::Xmm15.into()),
+        ];
+
+        for (reg, regid) in xmm_regmap.iter() {
+            let offset = memoffset::offset_of!(Machine, fxsave)
+                + memoffset::offset_of!(XSaveMin, xmm_registers) + *regid as usize * 16;
+            a.movaps(xmmword_ptr(rcx + offset), **reg).unwrap();
+        }
+
         a.mov(rdx, program as u64).unwrap();
         a.mov(rax, Machine::run as u64).unwrap();
         a.call(rax).unwrap();

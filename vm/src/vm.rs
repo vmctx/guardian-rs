@@ -1,5 +1,5 @@
 use core::arch::global_asm;
-use crate::{CPU_STACK_SIZE, Machine, Register};
+use crate::{CPU_STACK_SIZE, Machine, Register, XmmRegister};
 use memoffset::offset_of;
 
 const SIZE_OF_MACHINE: usize = core::mem::size_of::<Machine>();
@@ -22,6 +22,23 @@ global_asm!(include_str!("vm.asm"),
     r13 = const offset_of!(Machine, regs) + Register::R13 as u8 as usize * 8,
     r14 = const offset_of!(Machine, regs) + Register::R14 as u8 as usize * 8,
     r15 = const offset_of!(Machine, regs) + Register::R15 as u8 as usize * 8,
+    //fxsave = const offset_of!(Machine, fxsave),
+    xmm0 = const offset_of!(Machine, fxsave) + XmmRegister::Xmm0 as u8 as usize * 16,
+    xmm1 = const offset_of!(Machine, fxsave) + XmmRegister::Xmm1 as u8 as usize * 16,
+    xmm2 = const offset_of!(Machine, fxsave) + XmmRegister::Xmm2 as u8 as usize * 16,
+    xmm3 = const offset_of!(Machine, fxsave) + XmmRegister::Xmm3 as u8 as usize * 16,
+    xmm4 = const offset_of!(Machine, fxsave) + XmmRegister::Xmm4 as u8 as usize * 16,
+    xmm5 = const offset_of!(Machine, fxsave) + XmmRegister::Xmm5 as u8 as usize * 16,
+    xmm6 = const offset_of!(Machine, fxsave) + XmmRegister::Xmm6 as u8 as usize * 16,
+    xmm7 = const offset_of!(Machine, fxsave) + XmmRegister::Xmm7 as u8 as usize * 16,
+    xmm8 = const offset_of!(Machine, fxsave) + XmmRegister::Xmm8 as u8 as usize * 16,
+    xmm9 = const offset_of!(Machine, fxsave) + XmmRegister::Xmm9 as u8 as usize * 16,
+    xmm10 = const offset_of!(Machine, fxsave) + XmmRegister::Xmm10 as u8 as usize * 16,
+    xmm11 = const offset_of!(Machine, fxsave) + XmmRegister::Xmm11 as u8 as usize * 16,
+    xmm12 = const offset_of!(Machine, fxsave) + XmmRegister::Xmm12 as u8 as usize * 16,
+    xmm13 = const offset_of!(Machine, fxsave) + XmmRegister::Xmm13 as u8 as usize * 16,
+    xmm14 = const offset_of!(Machine, fxsave) + XmmRegister::Xmm14 as u8 as usize * 16,
+    xmm15 = const offset_of!(Machine, fxsave) + XmmRegister::Xmm15 as u8 as usize * 16,
     rflags = const offset_of!(Machine, rflags),
     cpustack = const offset_of!(Machine, cpustack),
     cpustack_offset = const CPU_STACK_SIZE - 0x100 - core::mem::size_of::<u64>() * 2

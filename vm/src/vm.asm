@@ -46,14 +46,35 @@ pop     rbp
 pop     rbx
 .endmacro
 
+fxsave:
+    // unaligned instr: vmovdqu
+    movaps [rcx + {xmm0}], xmm0
+    movaps [rcx + {xmm1}], xmm1
+    movaps [rcx + {xmm2}], xmm2
+    movaps [rcx + {xmm3}], xmm3
+    movaps [rcx + {xmm4}], xmm4
+    movaps [rcx + {xmm5}], xmm5
+    movaps [rcx + {xmm6}], xmm6
+    movaps [rcx + {xmm7}], xmm7
+    movaps [rcx + {xmm8}], xmm8
+    movaps [rcx + {xmm9}], xmm9
+    movaps [rcx + {xmm10}], xmm10
+    movaps [rcx + {xmm11}], xmm11
+    movaps [rcx + {xmm12}], xmm12
+    movaps [rcx + {xmm13}], xmm13
+    movaps [rcx + {xmm14}], xmm14
+    movaps [rcx + {xmm15}], xmm15
+    ret
+
 vmentry:
    // avoid new_vm call from changing registers like that
     pushfq // save rflags
     pushvol
-    sub rsp, {sizeof_machine}
+    // +8 to 16 byte align stack here
+    sub rsp, {sizeof_machine} + 8
     mov rcx, rsp
     call new_vm
-    add rsp, {sizeof_machine}
+    add rsp, {sizeof_machine} + 8
     popvol
     jmp vmenter
 
@@ -81,6 +102,8 @@ vmenter:
     //mov [rax + {rflags}], rcx
     // &mut Machine
     mov rcx,          rax
+    // save floating point and xmm regs
+    call fxsave
     // pop bytecode ptr, add it to image base addr = boom
     mov rax, qword ptr gs:[0x60]
     mov rax, [rax + 0x10]
