@@ -12,7 +12,6 @@ crate-type = ["cdylib"]
 doctest = false
 path = "src/lib.rs"
 
-
 [dependencies]
 static_assertions = "1.1.0"
 num_enum.workspace = true

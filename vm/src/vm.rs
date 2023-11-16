@@ -24,5 +24,5 @@ global_asm!(include_str!("vm.asm"),
     r15 = const offset_of!(Machine, regs) + Register::R15 as u8 as usize * 8,
     rflags = const offset_of!(Machine, rflags),
     cpustack = const offset_of!(Machine, cpustack),
-    cpustack_offset = const CPU_STACK_SIZE - 0x100 - core::mem::size_of::<u64>() // maybe define cpustack len as const
+    cpustack_offset = const CPU_STACK_SIZE - 0x100 - core::mem::size_of::<u64>() * 2
 );

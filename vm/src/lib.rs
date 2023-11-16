@@ -292,8 +292,9 @@ impl Machine {
         let vm_rsp = unsafe {
             m.cpustack
                 .as_ptr()
-                .add(m.cpustack.len() - 0x100 - size_of::<u64>()) as u64
+                .add(m.cpustack.len() - 0x100 - (size_of::<u64>() * 2)) as u64
         };
+        assert_eq!(vm_rsp % 16, 0);
         a.mov(rsp, vm_rsp).unwrap();
 
         a.mov(rcx, rax).unwrap();
@@ -369,7 +370,8 @@ impl Machine {
     pub unsafe extern "C" fn run(&mut self, program: *const u8) -> &mut Self {
         self.pc = program;
         self.sp = self.vmstack
-            .add((VM_STACK_SIZE - 0x100 - size_of::<u64>()) / size_of::<*mut u64>());
+            .add((VM_STACK_SIZE - 0x100 - (size_of::<u64>() * 2)) / size_of::<u64>());
+        assert_eq!(self.sp as u64 % 16, 0);
 
         let mut instructions = Vec::from_raw_parts(
             allocator::allocate(
@@ -436,9 +438,9 @@ impl Machine {
                     let current_image_base;
 
                     asm!(
-                    "mov rax, qword ptr gs:[0x60]",
-                    "mov {}, [rax + 0x10]",
-                    out(reg) current_image_base
+                        "mov rax, qword ptr gs:[0x60]",
+                        "mov {}, [rax + 0x10]",
+                        out(reg) current_image_base
                     );
 
                     let addr = self.stack_pop::<u64>()
@@ -483,16 +485,16 @@ impl Machine {
 pub fn reloc_instr(vm: &mut Machine, instr_size: usize, instr_buffer: &mut Vec<u8>) {
     let mut non_vol_regs: [u64; 9] = [0, 0, 0, 0, 0, 0, 0, 0, 0];
 
-    let non_vol_regmap: &[(&Reg64, u8)] = &[
-        (&rbx, Register::Rbx.into()),
-        (&rsp, Register::Rsp.into()),
-        (&rbp, Register::Rbp.into()),
-        (&rsi, Register::Rsi.into()),
-        (&rdi, Register::Rdi.into()),
-        (&r12, Register::R12.into()),
-        (&r13, Register::R13.into()),
-        (&r14, Register::R14.into()),
-        (&r15, Register::R15.into()),
+    let non_vol_regmap: &[&Reg64] = &[
+        &rbx,
+        &rsp,
+        &rbp,
+        &rsi,
+        &rdi,
+        &r12,
+        &r13,
+        &r14,
+        &r15,
     ];
 
     let regmap: &[(&Reg64, u8)] = &[
@@ -511,25 +513,20 @@ pub fn reloc_instr(vm: &mut Machine, instr_size: usize, instr_buffer: &mut Vec<u
         (&r13, Register::R13.into()),
         (&r14, Register::R14.into()),
         (&r15, Register::R15.into()),
+        (&rcx, Register::Rcx.into()),
     ];
 
     let mut asm = Asm::new(instr_buffer);
 
-    asm.mov(rax, Imm64::from(non_vol_regs.as_mut_ptr() as u64));
-
-    for (reg, regid) in non_vol_regmap.iter() {
-        let offset = *regid as usize * 8;
-        asm.mov(assembler::MemOp::IndirectDisp(rax, offset as i32), **reg);
+    for (index, reg) in non_vol_regmap.iter().enumerate() {
+        let offset = index * 8;
+        asm.mov(assembler::MemOp::IndirectDisp(rdx, offset as i32), **reg);
     }
 
     for (reg, regid) in regmap.iter() {
         let offset = offset_of!(Machine, regs) + *regid as usize * 8;
         asm.mov(**reg, assembler::MemOp::IndirectDisp(rcx, offset as i32));
     }
-
-    asm.mov(rcx, assembler::MemOp::IndirectDisp(rcx, (
-        offset_of!(Machine, regs) + Register::Rcx as u8 as usize * 8
-    ) as i32));
 
     let instructions = unsafe { slice::from_raw_parts(vm.pc, instr_size) };
     asm.code().extend_from_slice(instructions);
@@ -539,7 +536,7 @@ pub fn reloc_instr(vm: &mut Machine, instr_size: usize, instr_buffer: &mut Vec<u
 
     let regmap: &[(&Reg64, u8)] = &[
         (&rbx, Register::Rbx.into()),
-        (&rcx, Register::Rbx.into()),
+        (&rcx, Register::Rcx.into()),
         (&rdx, Register::Rdx.into()),
         (&rbp, Register::Rbp.into()),
         (&rsi, Register::Rsi.into()),
@@ -568,14 +565,15 @@ pub fn reloc_instr(vm: &mut Machine, instr_size: usize, instr_buffer: &mut Vec<u
 
     asm.mov(rax, Imm64::from(non_vol_regs.as_mut_ptr() as u64));
 
-    for (reg, regid) in non_vol_regmap.iter() {
-        let offset = *regid as usize * 8;
+    for (index, reg) in non_vol_regmap.iter().enumerate() {
+        let offset = index * 8;
         asm.mov(**reg, assembler::MemOp::IndirectDisp(rax, offset as i32));
     }
     asm.ret();
 
-    let func = unsafe { core::mem::transmute::<_, extern "C" fn(*mut Machine)>(instr_buffer.as_mut_ptr()) };
-    func(vm);
+    let func = unsafe { core::mem::transmute::<_, extern "C" fn(*mut Machine, *mut u64)>(instr_buffer.as_mut_ptr()) };
+    // use non_vol_regs here so no use after free just in case
+    func(vm, non_vol_regs.as_mut_ptr());
 }
 
 #[cfg(feature = "testing")]
