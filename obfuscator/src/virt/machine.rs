@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::ptr::read_unaligned;
 use iced_x86::{Encoder, InstructionInfoFactory, MemorySize, OpKind};
 use iced_x86::code_asm::{CodeAssembler, qword_ptr};
+use memoffset::offset_of;
 use num_enum::TryFromPrimitiveError;
 
 #[repr(C)]
@@ -464,6 +465,24 @@ impl From<iced_x86::Register> for XmmRegister {
         }
     }
 }
+
+pub trait MachineRegOffset {
+     fn reg_offset(&self) -> u64;
+}
+
+impl MachineRegOffset for iced_x86::Register {
+    /// Get offset to reg in [Machine] struct
+     fn reg_offset(&self) -> u64 {
+        if self.is_xmm() {
+            offset_of!(Machine, fxsave) as u64
+                + u8::from(XmmRegister::from(*self)) as u64 * 16
+        } else {
+            offset_of!(Machine, regs) as u64
+                + u8::from(Register::from(*self)) as u64 * 8
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct Assembler {
     program: Vec<u8>,

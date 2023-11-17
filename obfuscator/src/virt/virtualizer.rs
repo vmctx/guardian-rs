@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use exe::{PE, RelocationDirectory, RVA, VecPE};
-use crate::virt::machine::{Machine, Assembler, Register, JmpCond, OpSized, OpSize, HigherLower8Bit, RegUp, XmmRegister};
+use crate::virt::machine::{Machine, Assembler, Register, JmpCond, OpSized, OpSize, HigherLower8Bit, RegUp, XmmRegister, MachineRegOffset};
 use iced_x86::{Decoder, Encoder, Formatter, Instruction, Mnemonic, NasmFormatter, OpKind};
 use memoffset::offset_of;
 use crate::diassembler::Disassembler;
@@ -291,7 +291,6 @@ impl Virtualizer {
         };
     }
 
-    // todo untested
     // divide op0 by 2 for op1 times
     fn shr(&mut self, inst: &Instruction) {
         // opkind has to be memory or register
@@ -508,14 +507,8 @@ impl Asm for Virtualizer {
     }
 
     fn load_reg(&mut self, reg: iced_x86::Register) {
-        // todo impl as trait
-        let reg_offset = if reg.is_xmm() {
-            offset_of!(Machine, fxsave) as u64 + u8::from(XmmRegister::from(reg)) as u64 * 16
-        } else {
-            offset_of!(Machine, regs) as u64 + u8::from(Register::from(reg)) as u64 * 8
-        };
         self.asm.vmctx();
-        self.asm.const_(reg_offset);
+        self.asm.const_(reg.reg_offset());
         self.asm.vmadd();
 
         if reg.is_gpr() {
@@ -541,14 +534,8 @@ impl Asm for Virtualizer {
     }
 
     fn store_reg(&mut self, reg: iced_x86::Register) {
-        // todo impl as trait
-        let reg_offset = if reg.is_xmm() {
-            offset_of!(Machine, fxsave) as u64 + u8::from(XmmRegister::from(reg)) as u64 * 16
-        } else {
-            offset_of!(Machine, regs) as u64 + u8::from(Register::from(reg)) as u64 * 8
-        };
         self.asm.vmctx();
-        self.asm.const_(reg_offset);
+        self.asm.const_(reg.reg_offset());
         self.asm.vmadd();
 
         if reg.is_gpr() {

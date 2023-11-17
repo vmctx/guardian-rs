@@ -2,8 +2,6 @@ use std::path::PathBuf;
 use std::process::{ExitStatus, Stdio};
 use test_binary::TestBinary;
 use obfuscator::Obfuscator;
-// todo write test cases to verify instruction generate
-// correct opcodes (size etc)
 
 #[test]
 fn binary_hello_world() {
