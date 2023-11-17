@@ -47,13 +47,15 @@ static ALLOCATOR: allocator::Allocator = allocator::Allocator;
 mod allocator;
 
 #[repr(u8)]
-#[derive(PartialEq)]
+#[derive(PartialEq, Copy, Clone)]
 #[derive(Debug, num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
 pub enum Opcode {
     Const,
     Load,
+    LoadXmm,
     // only diff is that 32 bit doesnt cast as 64 bit ptr
     Store,
+    StoreXmm,
     StoreReg,
     Add,
     Sub,
@@ -236,11 +238,11 @@ pub struct Machine {
 
 #[repr(C, align(16))]
 pub struct XSaveMin {
-    float_registers: [u128; 8],
     #[cfg(target_pointer_width = "64")]
     xmm_registers: [u128; 16],
     #[cfg(target_pointer_width = "32")]
     xmm_registers: [u128; 8],
+    float_registers: [u128; 8],
 }
 
 // check why anything bigger than this causes issues with my example program
@@ -388,6 +390,14 @@ impl Machine {
         a.push(rax).unwrap();
         a.popfq().unwrap();
 
+        // restore xmm regs
+
+        for (reg, regid) in xmm_regmap.iter() {
+            let offset = memoffset::offset_of!(Machine, fxsave)
+                + memoffset::offset_of!(XSaveMin, xmm_registers) + *regid as usize * 16;
+            a.movaps(**reg, xmmword_ptr(rcx + offset)).unwrap();
+        }
+
         // Restore the GPRs
         for (reg, regid) in regmap.iter() {
             let offset = memoffset::offset_of!(Machine, regs) + *regid as usize * 8;
@@ -452,7 +462,9 @@ impl Machine {
             match op {
                 Opcode::Const => handlers::r#const::r#const(self, op_size),
                 Opcode::Load => handlers::load::load(self, op_size),
+                Opcode::LoadXmm => handlers::load::load_xmm(self, op_size),
                 Opcode::Store => handlers::store::store(self, op_size),
+                Opcode::StoreXmm => handlers::store::store_xmm(self, op_size),
                 Opcode::StoreReg => handlers::store::store_reg(self, op_size),
                 Opcode::Div => handlers::div::div(self, op_size), // unfinished
                 Opcode::Mul => handlers::mul::mul(self, op_size),

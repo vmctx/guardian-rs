@@ -35,6 +35,27 @@ mod tests {
 
     #[test]
     #[cfg(target_env = "msvc")]
+    fn test_xmm() {
+        use iced_x86::code_asm::*;
+        let mut a = CodeAssembler::new(64).unwrap();
+        let mut test = 0x45;
+        let imm128 = u128::MAX;
+        a.mov(rax, (imm128) as u64).unwrap();
+        a.movq(xmm1, rax).unwrap();
+        // todo is this expected behaviour even tho i dont bitshift imm128?
+        a.pinsrq(xmm1, rax, 1).unwrap();
+        a.movaps(xmmword_ptr(rcx), xmm1).unwrap();
+        a.ret().unwrap();
+
+        let bytecode = virtualize(&a.assemble(0).unwrap());
+        let m = Machine::new(bytecode.as_ptr()).unwrap();
+        let f: extern "C" fn(&mut u128)  = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        assert_eq!(f(&mut test), ());
+        assert_eq!(test, u128::MAX);
+    }
+
+    #[test]
+    #[cfg(target_env = "msvc")]
     fn rax_and_ax() {
         use iced_x86::code_asm::*;
         let mut a = CodeAssembler::new(64).unwrap();

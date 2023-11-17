@@ -1,5 +1,4 @@
 .global vmentry
-.global vmexit
 
 // https://learn.microsoft.com/en-us/cpp/build/x64-calling-convention?view=msvc-170&viewFallbackFrom=vs-2019#callercallee-saved-registers
 .macro pushvol
@@ -64,6 +63,26 @@ fxsave:
     movaps [rcx + {xmm13}], xmm13
     movaps [rcx + {xmm14}], xmm14
     movaps [rcx + {xmm15}], xmm15
+    ret
+
+fxrestore:
+    // unaligned instr: vmovdqu
+    movaps xmm0, [rcx + {xmm0}]
+    movaps xmm1, [rcx + {xmm1}]
+    movaps xmm2, [rcx + {xmm2}]
+    movaps xmm3, [rcx + {xmm3}]
+    movaps xmm4, [rcx + {xmm4}]
+    movaps xmm5, [rcx + {xmm5}]
+    movaps xmm6, [rcx + {xmm6}]
+    movaps xmm7, [rcx + {xmm7}]
+    movaps xmm8, [rcx + {xmm8}]
+    movaps xmm9, [rcx + {xmm9}]
+    movaps xmm10, [rcx + {xmm10}]
+    movaps xmm11, [rcx + {xmm11}]
+    movaps xmm12, [rcx + {xmm12}]
+    movaps xmm13, [rcx + {xmm13}]
+    movaps xmm14, [rcx + {xmm14}]
+    movaps xmm15, [rcx + {xmm15}]
     ret
 
 vmentry:
@@ -131,6 +150,8 @@ vmexit:
     mov rax, [rcx + {rflags}]
     push rax
     popfq
+    // restore xmm regs
+    call fxrestore
     // restore gpr
     mov rax, [rcx + {rax}]
     mov rdx, [rcx + {rdx}]

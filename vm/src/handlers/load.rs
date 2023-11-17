@@ -12,3 +12,8 @@ pub unsafe fn load(vm: &mut Machine, op_size: OpSize) {
         OpSize::Byte => vm.stack_push::<u16>(value as u16) // stack alignment
     };
 }
+
+pub unsafe fn load_xmm(vm: &mut Machine, _op_size: OpSize) {
+    let value = vm.stack_pop::<*const u128>().read_unaligned();
+    vm.stack_push::<u128>(value)
+}

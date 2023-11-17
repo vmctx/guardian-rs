@@ -9,9 +9,19 @@ pub struct Machine {
     pub(crate) pc: *const u8,
     pub(crate) sp: *mut u64,
     pub regs: [u64; 16],
+    pub fxsave: XSaveMin,
     pub rflags: u64,
     pub vmstack: *mut u64,
     pub cpustack: *mut u8,
+}
+
+#[repr(C, align(16))]
+pub struct XSaveMin {
+    #[cfg(target_pointer_width = "64")]
+    xmm_registers: [u128; 16],
+    #[cfg(target_pointer_width = "32")]
+    xmm_registers: [u128; 8],
+    float_registers: [u128; 8],
 }
 
 #[repr(u8)]
@@ -29,8 +39,10 @@ pub enum OpSize {
 pub enum Opcode {
     Const,
     Load,
+    LoadXmm,
     // only diff is that 32 bit doesnt cast as 64 bit ptr
     Store,
+    StoreXmm,
     StoreReg,
     Add,
     Sub,
@@ -322,6 +334,27 @@ pub enum Register {
     R15,
 }
 
+#[repr(u8)]
+#[derive(Debug, num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
+pub enum XmmRegister {
+    Xmm0,
+    Xmm1,
+    Xmm2,
+    Xmm3,
+    Xmm4,
+    Xmm5,
+    Xmm6,
+    Xmm7,
+    Xmm8,
+    Xmm9,
+    Xmm10,
+    Xmm11,
+    Xmm12,
+    Xmm13,
+    Xmm14,
+    Xmm15,
+}
+
 impl From<iced_x86::Register> for Register {
     fn from(reg: iced_x86::Register) -> Self {
         // reg.full_register() and exclude rip?
@@ -403,6 +436,34 @@ impl From<iced_x86::Register> for Register {
     }
 }
 
+impl From<iced_x86::Register> for XmmRegister {
+    fn from(reg: iced_x86::Register) -> Self {
+        // reg.full_register() and exclude rip?
+        // maybe when i add xmm/ymm/zmm support
+        // probably only support xmm (128 bit) 0-15
+        // will have to see maybe dont allocate struct on stack
+        // but its better to
+        match reg {
+            iced_x86::Register::XMM0 => XmmRegister::Xmm0,
+            iced_x86::Register::XMM1 => XmmRegister::Xmm1,
+            iced_x86::Register::XMM2 => XmmRegister::Xmm2,
+            iced_x86::Register::XMM3 => XmmRegister::Xmm3,
+            iced_x86::Register::XMM4 => XmmRegister::Xmm4,
+            iced_x86::Register::XMM5 => XmmRegister::Xmm5,
+            iced_x86::Register::XMM6 => XmmRegister::Xmm6,
+            iced_x86::Register::XMM7 => XmmRegister::Xmm7,
+            iced_x86::Register::XMM8 => XmmRegister::Xmm8,
+            iced_x86::Register::XMM9 => XmmRegister::Xmm9,
+            iced_x86::Register::XMM10 => XmmRegister::Xmm10,
+            iced_x86::Register::XMM11 => XmmRegister::Xmm11,
+            iced_x86::Register::XMM12 => XmmRegister::Xmm12,
+            iced_x86::Register::XMM13 => XmmRegister::Xmm13,
+            iced_x86::Register::XMM14 => XmmRegister::Xmm14,
+            iced_x86::Register::XMM15 => XmmRegister::Xmm15,
+            _ => panic!("unsupported register"),
+        }
+    }
+}
 #[derive(Default)]
 pub struct Assembler {
     program: Vec<u8>,
@@ -430,8 +491,16 @@ impl Assembler {
         self.emit_sized::<T>(Opcode::Load);
     }
 
+    pub fn load_xmm(&mut self) {
+        self.emit(Opcode::LoadXmm);
+    }
+
     pub fn store<T: OpSized>(&mut self) {
         self.emit_sized::<T>(Opcode::Store);
+    }
+
+    pub fn store_xmm(&mut self) {
+        self.emit(Opcode::StoreXmm);
     }
 
     pub fn store_reg<T: OpSized>(&mut self) {

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use exe::{PE, RelocationDirectory, RVA, VecPE};
-use crate::virt::machine::{Machine, Assembler, Register, JmpCond, OpSized, OpSize, HigherLower8Bit, RegUp};
+use crate::virt::machine::{Machine, Assembler, Register, JmpCond, OpSized, OpSize, HigherLower8Bit, RegUp, XmmRegister};
 use iced_x86::{Decoder, Encoder, Formatter, Instruction, Mnemonic, NasmFormatter, OpKind};
 use memoffset::offset_of;
 use crate::diassembler::Disassembler;
@@ -508,52 +508,67 @@ impl Asm for Virtualizer {
     }
 
     fn load_reg(&mut self, reg: iced_x86::Register) {
-        let r: u8 = Register::from(reg).into();
-        let reg_offset = r as u64 * 8;
+        // todo impl as trait
+        let reg_offset = if reg.is_xmm() {
+            offset_of!(Machine, fxsave) as u64 + u8::from(XmmRegister::from(reg)) as u64 * 16
+        } else {
+            offset_of!(Machine, regs) as u64 + u8::from(Register::from(reg)) as u64 * 8
+        };
         self.asm.vmctx();
-        self.asm
-            .const_(offset_of!(Machine, regs) as u64 + reg_offset);
+        self.asm.const_(reg_offset);
         self.asm.vmadd();
 
-        let operand_size = OpSize::try_from(reg.size() as u8).unwrap();
+        if reg.is_gpr() {
+            let operand_size = OpSize::try_from(reg.size() as u8).unwrap();
 
-        match operand_size {
-            OpSize::Byte => if reg.is_higher_8_bit() {
-                // load 8 is same as 16 bit anyways it will get truncated
-                self.asm.load::<u16>();
-                // shift higher bits to lower on stack
-                self.asm.rot_right();
-            } else {
-                self.asm.load::<u8>()
-            },
-            OpSize::Word => self.asm.load::<u16>(),
-            OpSize::Dword => self.asm.load::<u32>(),
-            OpSize::Qword => self.asm.load::<u64>()
+            match operand_size {
+                OpSize::Byte => if reg.is_higher_8_bit() {
+                    // load 8 is same as 16 bit anyways it will get truncated
+                    self.asm.load::<u16>();
+                    // shift higher bits to lower on stack
+                    self.asm.rot_right();
+                } else {
+                    self.asm.load::<u8>()
+                },
+                OpSize::Word => self.asm.load::<u16>(),
+                OpSize::Dword => self.asm.load::<u32>(),
+                OpSize::Qword => self.asm.load::<u64>()
+            }
+        } else {
+            // load 128 bit
+            self.asm.load_xmm();
         }
     }
 
     fn store_reg(&mut self, reg: iced_x86::Register) {
-        let r: u8 = Register::from(reg).into();
-        let reg_offset = r as u64 * 8;
+        // todo impl as trait
+        let reg_offset = if reg.is_xmm() {
+            offset_of!(Machine, fxsave) as u64 + u8::from(XmmRegister::from(reg)) as u64 * 16
+        } else {
+            offset_of!(Machine, regs) as u64 + u8::from(Register::from(reg)) as u64 * 8
+        };
         self.asm.vmctx();
-        self.asm
-            .const_(offset_of!(Machine, regs) as u64 + reg_offset);
+        self.asm.const_(reg_offset);
         self.asm.vmadd();
 
-        let operand_size = OpSize::try_from(reg.size() as u8).unwrap();
+        if reg.is_gpr() {
+            let operand_size = OpSize::try_from(reg.size() as u8).unwrap();
 
-        match operand_size {
-            OpSize::Byte => if reg.is_higher_8_bit() {
-                self.asm.store_reg::<u8>();
-                self.load_reg(reg.get_gpr_16());
-                self.asm.rot_left();
-                self.store_reg(reg.get_gpr_16());
-            } else {
-                self.asm.store_reg::<u8>()
-            },
-            OpSize::Word => self.asm.store_reg::<u16>(),
-            OpSize::Dword => self.asm.store_reg::<u32>(),
-            OpSize::Qword => self.asm.store_reg::<u64>()
+            match operand_size {
+                OpSize::Byte => if reg.is_higher_8_bit() {
+                    self.asm.store_reg::<u8>();
+                    self.load_reg(reg.get_gpr_16());
+                    self.asm.rot_left();
+                    self.store_reg(reg.get_gpr_16());
+                } else {
+                    self.asm.store_reg::<u8>()
+                },
+                OpSize::Word => self.asm.store_reg::<u16>(),
+                OpSize::Dword => self.asm.store_reg::<u32>(),
+                OpSize::Qword => self.asm.store_reg::<u64>()
+            }
+        } else {
+            self.asm.store_xmm();
         }
     }
 

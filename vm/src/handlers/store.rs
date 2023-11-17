@@ -11,6 +11,11 @@ pub unsafe fn store(vm: &mut Machine, op_size: OpSize) {
     };
 }
 
+pub unsafe fn store_xmm(vm: &mut Machine, _op_size: OpSize) {
+    let target_addr = vm.stack_pop::<*mut u128>();
+    target_addr.write_unaligned(vm.stack_pop::<u128>())
+}
+
 pub unsafe fn store_reg(vm: &mut Machine, op_size: OpSize) {
     match op_size {
         OpSize::Dword => {
