@@ -32,6 +32,8 @@ trait Asm {
     fn add<T: OpSized>(&mut self);
     fn sub<T: OpSized>(&mut self);
     fn div<T: OpSized>(&mut self);
+    fn shr<T: OpSized>(&mut self);
+    fn combine<T: OpSized>(&mut self);
     fn mul<T: OpSized>(&mut self);
     fn and<T: OpSized>(&mut self);
     fn or<T: OpSized>(&mut self);
@@ -152,10 +154,8 @@ impl Virtualizer {
                 //Mnemonic::Movzx => self.movzx(&inst),
                 Mnemonic::Add => self.add(&inst),
                 Mnemonic::Sub => self.sub(&inst),
-                // todo for now dont support them, see div method below
                 Mnemonic::Div => self.div(&inst),
-                //Mnemonic::Idiv => self.div(inst),
-                // same reason as div
+                // todo Mnemonic::Idiv => self.div(inst),
                 Mnemonic::Shr => self.shr(&inst),
                 //Mnemonic::Mul => self.mul(inst),
                 Mnemonic::Imul => self.mul(&inst),
@@ -234,59 +234,46 @@ impl Virtualizer {
         binary_op!(self, inst, sub)
     }
 
-    // todo store remainder, use correct regs
-    // https://treeniks.github.io/x86-64-simplified/instructions/binary-arithmetic-instructions/div.html
-    // inst.op0_kind().eq(...)
-    // inst.op_register(0).size() 1, 2, 4, 8 bytes
-    /*
-    load_operand inst, 0;
-    if op_kind is 8 bit
-        load_reg AX
-        div
-        store_reg AL
-        store_reg AH
-    else if op_kind is 16 bit
-        load_reg AX
-        div
-        store_reg AX
-        store_reg DX
-    else if op_kind is 32 bit
-        load_reg EAX
-        div
-        store_reg EAX
-        store_reg EDX
-    else if op_kind is 64 bit
-        load_reg RAX
-        div
-        store_reg RAX
-        store_reg RDX
-
-     */
     fn div(&mut self, inst: &Instruction) {
-        use iced_x86::Register::{AX, EAX, RAX};
+        use iced_x86::Register::*;
 
         // opkind has to be memory or register
         assert_ne!(inst.op0_kind(), OpKind::Immediate8to64);
 
         match OpSize::try_from(inst.op0_register()).unwrap() {
-            OpSize::Byte => panic!("unsupported operand size"),
-            OpSize::Word => vmasm!(self,
+            OpSize::Byte => vmasm!(self,
                 load_reg, AX;
                 load_operand, inst, 0;
+                div::<u8>;
+                store_reg, AL;
+                store_reg, AH;
+            ),
+            OpSize::Word => vmasm!(self,
+                load_reg, DX; // and ax
+                load_reg, AX; // and ax
+                combine::<u16>; // add dx (16 bit) to ax (16 bit) and push u32?
+                load_operand, inst, 0;
                 div::<u16>;
-                store_reg, AX; // no clue
+                store_reg, AX;
+                store_reg, DX;
             ),
             OpSize::Dword => vmasm!(self,
+                load_reg, EDX;
                 load_reg, EAX;
+                combine::<u32>; // add dx (32 bit) to ax (32 bit) and push u64?
                 load_operand, inst, 0;
                 div::<u32>;
                 store_reg, EAX;
+                store_reg, EDX;
             ),
             OpSize::Qword => vmasm!(self,
+                load_reg, RDX;
                 load_reg, RAX;
+                combine::<u64>;
                 load_operand, inst, 0;
                 div::<u64>;
                 store_reg, RAX;
+                store_reg, RDX;
             )
         };
     }
@@ -302,10 +289,10 @@ impl Virtualizer {
                 load_operand, inst, 0;
             );
             match OpSize::try_from(inst.op0_register()).unwrap() {
-                OpSize::Byte => vmasm!(self, const_::<u8>, 2; div::<u8>;),
-                OpSize::Word => vmasm!(self, const_::<u16>, 2; div::<u16>;),
-                OpSize::Dword => vmasm!(self, const_::<u32>, 2; div::<u32>;),
-                OpSize::Qword => vmasm!(self, const_::<u64>, 2; div::<u64>;),
+                OpSize::Byte => vmasm!(self, const_::<u8>, 2; shr::<u8>;),
+                OpSize::Word => vmasm!(self, const_::<u16>, 2; shr::<u16>;),
+                OpSize::Dword => vmasm!(self, const_::<u32>, 2; shr::<u32>;),
+                OpSize::Qword => vmasm!(self, const_::<u64>, 2; shr::<u64>;),
             }
             vmasm!(self,
                 store_operand, inst, 0;
@@ -426,6 +413,14 @@ impl Asm for Virtualizer {
 
     fn div<T: OpSized>(&mut self) {
         self.asm.div::<T>();
+    }
+
+    fn shr<T: OpSized>(&mut self) {
+        self.asm.shr::<T>();
+    }
+
+    fn combine<T: OpSized>(&mut self) {
+        self.asm.combine::<T>();
     }
 
     fn mul<T: OpSized>(&mut self) {

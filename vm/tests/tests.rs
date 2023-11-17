@@ -188,16 +188,19 @@ mod tests {
     fn virtualize_div() {
         use iced_x86::code_asm::*;
         let mut a = CodeAssembler::new(64).unwrap();
-        a.mov(rax, rcx).unwrap(); // mov first argument into rax (dividend)
-        a.mov(rcx, rdx).unwrap(); // mov second argument to rcx (divisor)
-        a.xor(rdx, rdx).unwrap(); // clear rdx
-        a.div(rcx).unwrap(); // 8 / 4 = 2 in rax
+        let mut remainder = 0;
+        a.mov(eax, 10).unwrap();
+        a.mov(r8, 8i64).unwrap();
+        a.xor(edx, edx).unwrap();
+        a.div(r8).unwrap(); // mov second argument to rcx (divisor)
+        a.mov(dword_ptr(rcx), edx).unwrap();
         a.ret().unwrap();
 
         let bytecode = virtualize(&a.assemble(0).unwrap());
         let m = Machine::new(bytecode.as_ptr()).unwrap();
-        let f: extern "C" fn(i32, i32) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
-        assert_eq!(f(8, 4), 2);
+        let f: extern "C" fn(&mut u32) -> u32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        assert_eq!(f(&mut remainder), 1);
+        assert_eq!(remainder, 2);
     }
 
     #[test]

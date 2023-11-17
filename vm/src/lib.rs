@@ -60,6 +60,8 @@ pub enum Opcode {
     Add,
     Sub,
     Div,
+    Shr,
+    Combine,
     Mul,
     And,
     Or,
@@ -466,7 +468,9 @@ impl Machine {
                 Opcode::Store => handlers::store::store(self, op_size),
                 Opcode::StoreXmm => handlers::store::store_xmm(self, op_size),
                 Opcode::StoreReg => handlers::store::store_reg(self, op_size),
-                Opcode::Div => handlers::div::div(self, op_size), // unfinished
+                Opcode::Div => handlers::div::div(self, op_size),
+                Opcode::Shr => handlers::div::shr(self, op_size), // possibly unfinished
+                Opcode::Combine => handlers::comb::combine(self, op_size),
                 Opcode::Mul => handlers::mul::mul(self, op_size),
                 Opcode::Add => handlers::add::add(self, op_size),
                 Opcode::Sub => handlers::sub::sub(self, op_size),
@@ -504,7 +508,6 @@ impl Machine {
                 Opcode::VmSub => binary_op!(self, wrapping_sub),
                 Opcode::VmMul => binary_op!(self, wrapping_mul),
                 Opcode::VmReloc => {
-                    // todo test
                     let old_image_base = self.pc.cast::<u64>().read_unaligned();
                     let current_image_base;
 
