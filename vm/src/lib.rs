@@ -18,9 +18,10 @@ use memoffset::offset_of;
 use x86::bits64::rflags::RFlags;
 
 use crate::allocator::Protection;
-use crate::assembler::{Asm, Imm64, Reg64};
-use crate::assembler::prelude::{Mov, Pop, Push};
+use crate::assembler::{Asm, Imm64, Reg64, RegXmm};
+use crate::assembler::prelude::{Mov, MovAps, Pop, Push};
 use crate::assembler::Reg64::*;
+use crate::assembler::RegXmm::*;
 
 #[cfg(not(feature = "testing"))]
 #[panic_handler]
@@ -33,7 +34,7 @@ mod crt;
 mod handlers;
 
 const VM_STACK_SIZE: usize = 0x1000;
-const CPU_STACK_SIZE: usize = 0x2000;
+const CPU_STACK_SIZE: usize = 0x4000;
 
 #[cfg(not(feature = "testing"))]
 mod vm;
@@ -590,7 +591,32 @@ pub fn reloc_instr(vm: &mut Machine, instr_size: usize, instr_buffer: &mut Vec<u
         (&rcx, Register::Rcx.into()),
     ];
 
+    let xmm_regmap: &[(&RegXmm, u8)] = &[
+        (&xmm0, XmmRegister::Xmm0.into()),
+        (&xmm1, XmmRegister::Xmm1.into()),
+        (&xmm2, XmmRegister::Xmm2.into()),
+        (&xmm3, XmmRegister::Xmm3.into()),
+        (&xmm4, XmmRegister::Xmm4.into()),
+        (&xmm5, XmmRegister::Xmm5.into()),
+        (&xmm6, XmmRegister::Xmm6.into()),
+        (&xmm7, XmmRegister::Xmm7.into()),
+        (&xmm8, XmmRegister::Xmm8.into()),
+        (&xmm9, XmmRegister::Xmm9.into()),
+        (&xmm10, XmmRegister::Xmm10.into()),
+        (&xmm11, XmmRegister::Xmm11.into()),
+        (&xmm12, XmmRegister::Xmm12.into()),
+        (&xmm13, XmmRegister::Xmm13.into()),
+        (&xmm14, XmmRegister::Xmm14.into()),
+        (&xmm15, XmmRegister::Xmm15.into()),
+    ];
+
     let mut asm = Asm::new(instr_buffer);
+
+    for (reg, regid) in xmm_regmap.iter() {
+        let offset = memoffset::offset_of!(Machine, fxsave)
+            + memoffset::offset_of!(XSaveMin, xmm_registers) + *regid as usize * 16;
+        asm.movaps(**reg, assembler::MemOp::IndirectDisp(rcx, offset as i32));
+    }
 
     for (index, reg) in non_vol_regmap.iter().enumerate() {
         let offset = index * 8;
@@ -624,6 +650,12 @@ pub fn reloc_instr(vm: &mut Machine, instr_size: usize, instr_buffer: &mut Vec<u
         (&r14, Register::R14.into()),
         (&r15, Register::R15.into()),
     ];
+
+    for (reg, regid) in xmm_regmap.iter() {
+        let offset = memoffset::offset_of!(Machine, fxsave)
+            + memoffset::offset_of!(XSaveMin, xmm_registers) + *regid as usize * 16;
+        asm.movaps(assembler::MemOp::IndirectDisp(rax, offset as i32), **reg);
+    }
 
     for (reg, regid) in regmap.iter() {
         let offset = offset_of!(Machine, regs) + *regid as usize * 8;

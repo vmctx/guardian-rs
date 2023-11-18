@@ -476,7 +476,7 @@ impl MachineRegOffset for iced_x86::Register {
     /// Get offset to reg in [Machine] struct
      fn reg_offset(&self) -> u64 {
         if self.is_xmm() {
-            offset_of!(Machine, fxsave) as u64
+            offset_of!(Machine, fxsave) as u64 + memoffset::offset_of!(XSaveMin, xmm_registers) as u64
                 + u8::from(XmmRegister::from(*self)) as u64 * 16
         } else {
             offset_of!(Machine, regs) as u64

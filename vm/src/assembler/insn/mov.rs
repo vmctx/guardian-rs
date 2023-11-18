@@ -1,5 +1,17 @@
 use super::super::prelude::*;
 
+impl MovAps<RegXmm, MemOp> for Asm<'_> {
+    fn movaps(&mut self, op1: RegXmm, op2: MemOp) {
+        self.encode_rm_xmm(&[0x0F, 0x28], op1, op2);
+    }
+}
+
+impl MovAps<MemOp, RegXmm> for Asm<'_> {
+    fn movaps(&mut self, op1: MemOp, op2: RegXmm) {
+        self.encode_mr_xmm(&[0x0F, 0x29], op1, op2);
+    }
+}
+
 // -- MOV : reg reg
 
 impl Mov<Reg64, Reg64> for Asm<'_> {

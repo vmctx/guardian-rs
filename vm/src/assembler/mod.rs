@@ -9,7 +9,7 @@ mod reg;
 use alloc::vec::Vec;
 pub use imm::{Imm16, Imm32, Imm64, Imm8};
 pub use label::Label;
-pub use reg::{Reg16, Reg32, Reg64, Reg8};
+pub use reg::{Reg16, Reg32, Reg64, RegXmm, Reg8};
 
 use imm::Imm;
 use reg::Reg;
@@ -22,6 +22,7 @@ pub enum MemOp {
     /// An indirect memory operand with additional displacement, eg `mov [rax + 0x10], rcx`.
     IndirectDisp(Reg64, i32),
 }
+
 
 impl MemOp {
     /// Get the base address register of the memory operand.
@@ -238,6 +239,41 @@ impl Asm<'_> {
         }
     }
 
+    /// Encode a memory-register instruction.
+    fn encode_mr_xmm<T: Reg>(&mut self, opc: &[u8], op1: MemOp, op2: T)
+        where
+            Self: EncodeMR<T>,
+    {
+        // MR operand encoding.
+        //   op1 -> modrm.rm
+        //   op2 -> modrm.reg
+        let mode = match op1 {
+            MemOp::Indirect(..) => {
+                assert!(!op1.base().need_sib() && !op1.base().is_pc_rel());
+                0b00
+            }
+            MemOp::IndirectDisp(..) => {
+                assert!(!op1.base().need_sib());
+                0b10
+            }
+        };
+
+        let modrm = modrm(
+            mode,             /* mode */
+            op2.idx(),        /* reg */
+            op1.base().idx(), /* rm */
+        );
+        let prefix = <Self as EncodeMR<T>>::legacy_prefix();
+        let rex = <Self as EncodeMR<T>>::rex(&op1, op2);
+
+        self.emit_optional(&[prefix, rex]);
+        self.emit(opc);
+        self.emit(&[modrm]);
+        if let MemOp::IndirectDisp(_, disp) = op1 {
+            self.emit(&disp.to_ne_bytes());
+        }
+    }
+
     /// Encode a register-memory instruction.
     fn encode_rm<T: Reg>(&mut self, opc: u8, op1: T, op2: MemOp)
     where
@@ -247,6 +283,17 @@ impl Asm<'_> {
         //   op1 -> modrm.reg
         //   op2 -> modrm.rm
         self.encode_mr(opc, op2, op1);
+    }
+
+    /// Encode a register-memory instruction.
+    fn encode_rm_xmm<T: Reg>(&mut self, opc: &[u8], op1: T, op2: MemOp)
+        where
+            Self: EncodeMR<T>,
+    {
+        // RM operand encoding.
+        //   op1 -> modrm.reg
+        //   op2 -> modrm.rm
+        self.encode_mr_xmm(opc, op2, op1);
     }
 
     /// Encode a jump to label instruction.
@@ -315,6 +362,7 @@ impl EncodeR<Reg16> for Asm<'_> {
     }
 }
 impl EncodeR<Reg64> for Asm<'_>{}
+impl EncodeR<RegXmm> for Asm<'_>{}
 
 /// Encode helper for memory-register instructions.
 trait EncodeMR<T: Reg> {
@@ -339,3 +387,4 @@ impl EncodeMR<Reg16> for Asm<'_> {
 }
 impl EncodeMR<Reg32> for Asm<'_> {}
 impl EncodeMR<Reg64> for Asm<'_> {}
+impl EncodeMR<RegXmm> for Asm<'_> {}

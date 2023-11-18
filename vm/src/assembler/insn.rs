@@ -58,6 +58,11 @@ pub trait Mov<T, U> {
     fn mov(&mut self, op1: T, op2: U);
 }
 
+pub trait MovAps<T, U> {
+    /// Emit an move instruction.
+    fn movaps(&mut self, op1: T, op2: U);
+}
+
 pub trait Test<T, U> {
     /// Emit a logical compare instruction.
     ///
