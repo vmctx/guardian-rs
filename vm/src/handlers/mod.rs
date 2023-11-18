@@ -12,3 +12,4 @@ pub mod not;
 pub mod div;
 pub mod rot;
 pub mod comb;
+pub mod split;

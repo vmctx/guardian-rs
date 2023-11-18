@@ -34,6 +34,7 @@ trait Asm {
     fn div<T: OpSized>(&mut self, signed: bool);
     fn shr<T: OpSized>(&mut self);
     fn combine<T: OpSized>(&mut self);
+    fn split<T: OpSized>(&mut self);
     fn mul<T: OpSized>(&mut self);
     fn and<T: OpSized>(&mut self);
     fn or<T: OpSized>(&mut self);
@@ -157,8 +158,8 @@ impl Virtualizer {
                 Mnemonic::Div => self.div(&inst, false),
                 Mnemonic::Idiv => self.div(&inst, true),
                 Mnemonic::Shr => self.shr(&inst),
-                //todo Mnemonic::Mul => self.mul(inst),
-                Mnemonic::Imul => self.mul(&inst),
+                Mnemonic::Mul => self.mul(&inst),
+                // todo Mnemonic::Imul => self.imul(&inst),
                 Mnemonic::And => self.and(&inst),
                 Mnemonic::Or => self.or(&inst),
                 Mnemonic::Xor => self.xor(&inst),
@@ -298,6 +299,43 @@ impl Virtualizer {
     }
 
     fn mul(&mut self, inst: &Instruction) {
+        use iced_x86::Register::*;
+
+        match OpSize::try_from(inst.op0_register()).unwrap() {
+            OpSize::Byte => vmasm!(self,
+                load_reg, AL;
+                load_operand, inst, 0;
+                mul::<u8>;
+                store_reg, AX;
+            ),
+            OpSize::Word => vmasm!(self,
+                load_reg, AX;
+                load_operand, inst, 0;
+                mul::<u16>;
+                split::<u16>;
+                store_reg, AX;
+                store_reg, DX;
+            ),
+            OpSize::Dword => vmasm!(self,
+                load_reg, EAX;
+                load_operand, inst, 0;
+                mul::<u32>;
+                split::<u32>;
+                store_reg, EAX;
+                store_reg, EDX;
+            ),
+            OpSize::Qword => vmasm!(self,
+                load_reg, RAX;
+                load_operand, inst, 0;
+                mul::<u64>;
+                split::<u32>;
+                store_reg, RAX;
+                store_reg, RDX;
+            )
+        };
+    }
+
+    fn imul(&mut self, inst: &Instruction) {
         // todo 1 and 3 operands
         binary_op!(self, inst, mul)
     }
@@ -423,6 +461,10 @@ impl Asm for Virtualizer {
 
     fn combine<T: OpSized>(&mut self) {
         self.asm.combine::<T>();
+    }
+
+    fn split<T: OpSized>(&mut self) {
+        self.asm.split::<T>();
     }
 
     fn mul<T: OpSized>(&mut self) {

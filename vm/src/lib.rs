@@ -64,6 +64,7 @@ pub enum Opcode {
     IDiv,
     Shr,
     Combine,
+    Split,
     Mul,
     And,
     Or,
@@ -474,6 +475,7 @@ impl Machine {
                 Opcode::IDiv => handlers::div::idiv(self, op_size),
                 Opcode::Shr => handlers::div::shr(self, op_size), // possibly unfinished
                 Opcode::Combine => handlers::comb::combine(self, op_size),
+                Opcode::Split => handlers::split::split(self, op_size),
                 Opcode::Mul => handlers::mul::mul(self, op_size),
                 Opcode::Add => handlers::add::add(self, op_size),
                 Opcode::Sub => handlers::sub::sub(self, op_size),

@@ -1,10 +1,33 @@
 use crate::{binary_op_save_flags, Machine, OpSize};
 
+macro_rules! mul_save_flags {
+    ($self:ident, $bit:ident, $save_bit:ident) => {{
+        let (op2, op1) = unsafe { ($self.stack_pop::<$save_bit>() as $bit, $self.stack_pop::<$save_bit>() as $bit) };
+
+        let result = op1.wrapping_mul(op2);
+        $self.set_rflags();
+
+        unsafe { $self.stack_push::<$bit>(result); }
+    }}
+}
+
+use mul_save_flags;
+
 pub fn mul(vm: &mut Machine, op_size: OpSize) {
     match op_size {
-        OpSize::Qword => binary_op_save_flags!(vm, u64, wrapping_mul),
-        OpSize::Dword => binary_op_save_flags!(vm, u32, wrapping_mul),
-        OpSize::Word => binary_op_save_flags!(vm, u16, wrapping_mul),
-        OpSize::Byte => binary_op_save_flags!(vm, u8, wrapping_mul),
+        OpSize::Qword => mul_save_flags!(vm, u128, u64),
+        OpSize::Dword => mul_save_flags!(vm, u64, u32),
+        OpSize::Word => mul_save_flags!(vm, u32, u16),
+        OpSize::Byte => mul_save_flags!(vm, u16, u16),
+    }
+}
+
+// todo
+pub fn imul(vm: &mut Machine, op_size: OpSize) {
+    match op_size {
+        OpSize::Qword => mul_save_flags!(vm, i128, i64),
+        OpSize::Dword => mul_save_flags!(vm, i64, i32),
+        OpSize::Word => mul_save_flags!(vm, i32, i16),
+        OpSize::Byte => mul_save_flags!(vm, i16, i16),
     }
 }
