@@ -13,6 +13,7 @@ doctest = false
 path = "src/lib.rs"
 
 [dependencies]
+paste = "1.0.14"
 static_assertions = "1.1.0"
 num_enum.workspace = true
 memoffset.workspace = true
