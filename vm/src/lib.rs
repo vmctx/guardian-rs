@@ -61,6 +61,7 @@ pub enum Opcode {
     Add,
     Sub,
     Div,
+    IDiv,
     Shr,
     Combine,
     Mul,
@@ -470,6 +471,7 @@ impl Machine {
                 Opcode::StoreXmm => handlers::store::store_xmm(self, op_size),
                 Opcode::StoreReg => handlers::store::store_reg(self, op_size),
                 Opcode::Div => handlers::div::div(self, op_size),
+                Opcode::IDiv => handlers::div::idiv(self, op_size),
                 Opcode::Shr => handlers::div::shr(self, op_size), // possibly unfinished
                 Opcode::Combine => handlers::comb::combine(self, op_size),
                 Opcode::Mul => handlers::mul::mul(self, op_size),

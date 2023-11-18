@@ -205,18 +205,18 @@ mod tests {
         // idiv
         let mut a = CodeAssembler::new(64).unwrap();
         let mut remainder = 0;
-        a.mov(eax, 10).unwrap();
-        a.mov(r8, 8i64).unwrap();
+        a.mov(eax, 4294967278u32).unwrap();
+        a.mov(r8d, 6i32).unwrap();
         a.cdq().unwrap();
-        a.div(r8).unwrap(); // mov second argument to rcx (divisor)
+        a.idiv(r8d).unwrap(); // mov second argument to rcx (divisor)
         a.mov(dword_ptr(rcx), edx).unwrap();
         a.ret().unwrap();
 
         let bytecode = virtualize(&a.assemble(0).unwrap());
         let m = Machine::new(bytecode.as_ptr()).unwrap();
         let f: extern "C" fn(&mut i32) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
-        assert_eq!(f(&mut remainder), 1);
-        assert_eq!(remainder, 2);
+        assert_eq!(f(&mut remainder), -3);
+        assert_eq!(remainder, 0);
     }
 
     #[test]

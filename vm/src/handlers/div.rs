@@ -24,6 +24,15 @@ pub fn div(vm: &mut Machine, op_size: OpSize) {
     }
 }
 
+pub fn idiv(vm: &mut Machine, op_size: OpSize) {
+    match op_size {
+        OpSize::Qword => div_save_flags!(vm, i64, i128),
+        OpSize::Dword => div_save_flags!(vm, i32, i64),
+        OpSize::Word => div_save_flags!(vm, i16, i32),
+        OpSize::Byte => div_save_flags!(vm, i16, i16),
+    }
+}
+
 pub fn shr(vm: &mut Machine, op_size: OpSize) {
     match op_size {
         OpSize::Qword => binary_op_save_flags!(vm, u64, wrapping_div),

@@ -11,12 +11,10 @@ macro_rules! impl_set_bytes {
 
         impl [<SetBytes $to>] for $to {
             fn set_low(&mut self, value: $from) {
-                *self &= !0xff;
                 *self |= value as $to;
             }
 
             fn set_high(&mut self, value: $from) {
-                *self &= !0xff00;
                 *self |= (value as $to) << size_of::<$from>() * 8;
             }
         }

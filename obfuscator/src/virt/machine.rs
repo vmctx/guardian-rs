@@ -48,6 +48,7 @@ pub enum Opcode {
     Add,
     Sub,
     Div,
+    IDiv,
     Shr,
     Combine,
     Mul,
@@ -540,6 +541,10 @@ impl Assembler {
         self.emit_sized::<T>(Opcode::Div);
     }
 
+    pub fn idiv<T: OpSized>(&mut self) {
+        self.emit_sized::<T>(Opcode::IDiv);
+    }
+
     pub fn shr<T: OpSized>(&mut self) {
         self.emit_sized::<T>(Opcode::Shr);
     }
@@ -547,7 +552,6 @@ impl Assembler {
     pub fn combine<T: OpSized>(&mut self) {
         self.emit_sized::<T>(Opcode::Combine);
     }
-
 
     pub fn mul<T: OpSized>(&mut self) {
         self.emit_sized::<T>(Opcode::Mul);

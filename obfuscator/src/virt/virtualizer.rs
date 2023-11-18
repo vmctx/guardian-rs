@@ -31,7 +31,7 @@ trait Asm {
     fn store<T: OpSized>(&mut self);
     fn add<T: OpSized>(&mut self);
     fn sub<T: OpSized>(&mut self);
-    fn div<T: OpSized>(&mut self);
+    fn div<T: OpSized>(&mut self, signed: bool);
     fn shr<T: OpSized>(&mut self);
     fn combine<T: OpSized>(&mut self);
     fn mul<T: OpSized>(&mut self);
@@ -154,8 +154,8 @@ impl Virtualizer {
                 //Mnemonic::Movzx => self.movzx(&inst),
                 Mnemonic::Add => self.add(&inst),
                 Mnemonic::Sub => self.sub(&inst),
-                Mnemonic::Div => self.div(&inst),
-                Mnemonic::Idiv => self.div(&inst),
+                Mnemonic::Div => self.div(&inst, false),
+                Mnemonic::Idiv => self.div(&inst, true),
                 Mnemonic::Shr => self.shr(&inst),
                 //todo Mnemonic::Mul => self.mul(inst),
                 Mnemonic::Imul => self.mul(&inst),
@@ -234,16 +234,14 @@ impl Virtualizer {
         binary_op!(self, inst, sub)
     }
 
-    fn div(&mut self, inst: &Instruction) {
+    fn div(&mut self, inst: &Instruction, signed: bool) {
         use iced_x86::Register::*;
-
-        // todo seperate between div and idiv
 
         match OpSize::try_from(inst.op0_register()).unwrap() {
             OpSize::Byte => vmasm!(self,
                 load_reg, AX;
                 load_operand, inst, 0;
-                div::<u8>;
+                div::<u8>, signed;
                 store_reg, AL;
                 store_reg, AH;
             ),
@@ -252,16 +250,16 @@ impl Virtualizer {
                 load_reg, AX; // and ax
                 combine::<u16>; // add dx (16 bit) to ax (16 bit) and push u32?
                 load_operand, inst, 0;
-                div::<u16>;
+                div::<u16>, signed;
                 store_reg, AX;
                 store_reg, DX;
             ),
             OpSize::Dword => vmasm!(self,
                 load_reg, EDX;
                 load_reg, EAX;
-                combine::<u32>; // add dx (32 bit) to ax (32 bit) and push u64?
+                combine::<u32>; // add edx (32 bit) to eax (32 bit) and push u64?
                 load_operand, inst, 0;
-                div::<u32>;
+                div::<u32>, signed;
                 store_reg, EAX;
                 store_reg, EDX;
             ),
@@ -270,7 +268,7 @@ impl Virtualizer {
                 load_reg, RAX;
                 combine::<u64>;
                 load_operand, inst, 0;
-                div::<u64>;
+                div::<u64>, signed;
                 store_reg, RAX;
                 store_reg, RDX;
             )
@@ -411,8 +409,12 @@ impl Asm for Virtualizer {
         self.asm.sub::<T>();
     }
 
-    fn div<T: OpSized>(&mut self) {
-        self.asm.div::<T>();
+    fn div<T: OpSized>(&mut self, signed: bool) {
+        if signed {
+            self.asm.idiv::<T>();
+        } else {
+            self.asm.div::<T>();
+        }
     }
 
     fn shr<T: OpSized>(&mut self) {
