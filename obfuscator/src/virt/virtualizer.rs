@@ -19,7 +19,7 @@ impl Reloc for iced_x86::Instruction {
             .unwrap();
 
         let instr_rva = (self.ip() - pe_image_base) as u32;
-        relocations.iter().find(|(rva, _) | {
+        relocations.iter().find(|(rva, _)| {
             rva.0 >= instr_rva && rva.0 < instr_rva + self.len() as u32
         }).is_some()
     }
@@ -159,7 +159,7 @@ impl Virtualizer {
                 Mnemonic::Idiv => self.div(&inst, true),
                 Mnemonic::Shr => self.shr(&inst),
                 Mnemonic::Mul => self.mul(&inst),
-                // todo Mnemonic::Imul => self.imul(&inst),
+                Mnemonic::Imul => self.imul(&inst),
                 Mnemonic::And => self.and(&inst),
                 Mnemonic::Or => self.or(&inst),
                 Mnemonic::Xor => self.xor(&inst),
@@ -336,8 +336,19 @@ impl Virtualizer {
     }
 
     fn imul(&mut self, inst: &Instruction) {
-        // todo 1 and 3 operands
-        binary_op!(self, inst, mul)
+        match inst.op_count() {
+            1 => self.mul(inst),
+            2 => binary_op!(self, inst, mul),
+            3 => {
+                vmasm!(self,
+                    load_operand, inst, 1;
+                    load_operand, inst, 2;
+                );
+                sized_op!(self, mul, inst);
+                vmasm!(self, store_operand, inst, 0;);
+            }
+            _ => unreachable!()
+        }
     }
 
     fn and(&mut self, inst: &Instruction) {
@@ -353,9 +364,9 @@ impl Virtualizer {
     }
 
     fn not(&mut self, inst: &Instruction) {
-        vmasm!(self,load_operand, inst, 0;);
+        vmasm!(self, load_operand, inst, 0;);
         sized_op!(self, not, inst);
-        vmasm!(self,store_operand, inst, 0;);
+        vmasm!(self, store_operand, inst, 0;);
     }
 
     fn cmp(&mut self, inst: &Instruction) {

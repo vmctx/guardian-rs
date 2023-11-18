@@ -21,13 +21,3 @@ pub fn mul(vm: &mut Machine, op_size: OpSize) {
         OpSize::Byte => mul_save_flags!(vm, u16, u16),
     }
 }
-
-// todo
-pub fn imul(vm: &mut Machine, op_size: OpSize) {
-    match op_size {
-        OpSize::Qword => mul_save_flags!(vm, i128, i64),
-        OpSize::Dword => mul_save_flags!(vm, i64, i32),
-        OpSize::Word => mul_save_flags!(vm, i32, i16),
-        OpSize::Byte => mul_save_flags!(vm, i16, i16),
-    }
-}

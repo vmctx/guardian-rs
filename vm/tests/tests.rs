@@ -224,17 +224,6 @@ mod tests {
     fn virtualize_mul() {
         use iced_x86::code_asm::*;
         let mut a = CodeAssembler::new(64).unwrap();
-        a.imul_2(rcx, rdx).unwrap();
-        a.mov(rax, rcx).unwrap();
-        a.ret().unwrap();
-
-        let bytecode = virtualize(&a.assemble(0).unwrap());
-        let m = Machine::new(bytecode.as_ptr()).unwrap();
-        let f: extern "C" fn(i64, i64) -> i64 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
-        assert_eq!(f(-5, 2), -10);
-
-
-        let mut a = CodeAssembler::new(64).unwrap();
         let mut higher_bits = 0u32;
         a.mov(eax, 3).unwrap();
         a.mul(rcx).unwrap();
@@ -247,6 +236,25 @@ mod tests {
         let f: extern "C" fn(u32, &mut u32) -> u32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
         assert_eq!(f(0xFFFFFFFFu32, &mut higher_bits), 0xfffffffd);
         assert_eq!(higher_bits, 0x2);
+
+        let mut a = CodeAssembler::new(64).unwrap();
+        a.imul_2(rcx, rdx).unwrap();
+        a.mov(rax, rcx).unwrap();
+        a.ret().unwrap();
+
+        let bytecode = virtualize(&a.assemble(0).unwrap());
+        let m = Machine::new(bytecode.as_ptr()).unwrap();
+        let f: extern "C" fn(i64, i64) -> i64 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        assert_eq!(f(-5, 2), -10);
+
+        let mut a = CodeAssembler::new(64).unwrap();
+        a.imul_3(rax, rcx, 4i32).unwrap();
+        a.ret().unwrap();
+
+        let bytecode = virtualize(&a.assemble(0).unwrap());
+        let m = Machine::new(bytecode.as_ptr()).unwrap();
+        let f: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        assert_eq!(f(-5), -20);
     }
 
     #[test]

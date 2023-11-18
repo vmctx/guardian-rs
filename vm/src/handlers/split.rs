@@ -17,6 +17,6 @@ pub unsafe fn split(vm: &mut Machine, op_size: OpSize) {
             vm.stack_push(value >> 16);
             vm.stack_push(value);
         }
-        _ => panic!("not possible")
+        _ => unreachable!()
     }
 }
