@@ -155,9 +155,9 @@ impl Virtualizer {
                 Mnemonic::Add => self.add(&inst),
                 Mnemonic::Sub => self.sub(&inst),
                 Mnemonic::Div => self.div(&inst),
-                // todo Mnemonic::Idiv => self.div(inst),
+                Mnemonic::Idiv => self.div(&inst),
                 Mnemonic::Shr => self.shr(&inst),
-                //Mnemonic::Mul => self.mul(inst),
+                //todo Mnemonic::Mul => self.mul(inst),
                 Mnemonic::Imul => self.mul(&inst),
                 Mnemonic::And => self.and(&inst),
                 Mnemonic::Or => self.or(&inst),
@@ -237,8 +237,7 @@ impl Virtualizer {
     fn div(&mut self, inst: &Instruction) {
         use iced_x86::Register::*;
 
-        // opkind has to be memory or register
-        assert_ne!(inst.op0_kind(), OpKind::Immediate8to64);
+        // todo seperate between div and idiv
 
         match OpSize::try_from(inst.op0_register()).unwrap() {
             OpSize::Byte => vmasm!(self,
@@ -301,6 +300,7 @@ impl Virtualizer {
     }
 
     fn mul(&mut self, inst: &Instruction) {
+        // todo 1 and 3 operands
         binary_op!(self, inst, mul)
     }
 
