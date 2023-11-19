@@ -24,13 +24,13 @@ mod tests {
     fn test_unsupported() {
         use iced_x86::code_asm::*;
         let mut a = CodeAssembler::new(64).unwrap();
-        a.movzx(rax, cx).unwrap();
+        a.movzx(rax, cl).unwrap();
         a.ret().unwrap();
 
         let bytecode = virtualize(&a.assemble(0).unwrap());
         let m = Machine::new(bytecode.as_ptr()).unwrap();
         let f: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
-        assert_eq!(f(0x1111222233334444), 0x4444);
+        assert_eq!(f(0x1111222233334444), 0x44);
     }
 
     #[test]

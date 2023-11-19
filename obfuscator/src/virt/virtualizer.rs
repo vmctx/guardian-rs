@@ -1,9 +1,9 @@
 use std::collections::HashMap;
-use exe::{PE, RelocationDirectory, RVA, VecPE};
-use crate::virt::machine::{Machine, Assembler, Register, JmpCond, OpSized, OpSize, HigherLower8Bit, RegUp, XmmRegister, MachineRegOffset};
-use iced_x86::{Decoder, Encoder, Formatter, Instruction, Mnemonic, NasmFormatter, OpKind};
-use memoffset::offset_of;
-use crate::diassembler::Disassembler;
+
+use exe::{PE, RelocationDirectory, VecPE};
+use iced_x86::{Decoder, Formatter, Instruction, Mnemonic, NasmFormatter, OpKind};
+
+use crate::virt::machine::{Assembler, HigherLower8Bit, JmpCond, MachineRegOffset, OpSize, OpSized, RegUp};
 
 trait Reloc {
     fn has_reloc_entry(&self, pe: Option<&VecPE>) -> bool;
@@ -50,7 +50,7 @@ trait Asm {
     fn store_operand(&mut self, inst: &Instruction, operand: u32);
     fn load_reg(&mut self, reg: iced_x86::Register);
     fn store_reg(&mut self, reg: iced_x86::Register);
-    fn store_reg_zx(&mut self, reg: iced_x86::Register);
+    fn store_reg_zx(&mut self, reg: iced_x86::Register, from_reg: iced_x86::Register);
     fn lea_operand(&mut self, inst: &Instruction);
 }
 
@@ -223,7 +223,7 @@ impl Virtualizer {
     fn movzx(&mut self, inst: &Instruction) {
         vmasm!(self,
             load_operand, inst, 1;
-            store_reg_zx, inst.op_register(0);
+            store_reg_zx, inst.op_register(0), inst.op_register(1);
         );
     }
 
@@ -638,21 +638,21 @@ impl Asm for Virtualizer {
     }
 
     // used for movzx
-    fn store_reg_zx(&mut self, reg: iced_x86::Register) {
+    fn store_reg_zx(&mut self, reg: iced_x86::Register, from_reg: iced_x86::Register) {
         assert_eq!(reg.is_gpr(), true);
 
         self.asm.vmctx();
         self.asm.const_(reg.reg_offset());
         self.asm.vmadd();
 
-        let operand_size = OpSize::try_from(reg.size() as u8).unwrap();
+        let operand_size = OpSize::try_from(from_reg.size() as u8).unwrap();
 
         match operand_size {
-            OpSize::Byte => if reg.is_higher_8_bit() {
+            OpSize::Byte => if from_reg.is_higher_8_bit() {
                 self.asm.store_reg_zx::<u8>();
                 self.load_reg(reg.get_gpr_16());
                 self.asm.rot_left();
-                self.store_reg_zx(reg.get_gpr_16());
+                self.store_reg(reg.get_gpr_16());
             } else {
                 self.asm.store_reg_zx::<u8>()
             },
