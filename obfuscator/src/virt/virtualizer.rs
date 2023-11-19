@@ -244,7 +244,6 @@ impl Virtualizer {
         binary_op!(self, inst, sub)
     }
 
-    // todo make inc and dec code shorter
     fn inc(&mut self, inst: &Instruction) {
         vmasm!(self,
             load_operand, inst, 0;
@@ -310,7 +309,6 @@ impl Virtualizer {
         };
     }
 
-    // divide op0 by 2 for op1 times
     fn shr(&mut self, inst: &Instruction) {
         // opkind has to be memory or register
         assert_eq!(inst.op0_kind(), OpKind::Register);

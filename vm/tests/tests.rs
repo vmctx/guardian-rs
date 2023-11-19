@@ -42,7 +42,6 @@ mod tests {
         let imm128 = u128::MAX;
         a.mov(rax, (imm128) as u64).unwrap();
         a.movq(xmm1, rax).unwrap();
-        // todo is this expected behaviour even tho i dont bitshift imm128?
         a.pinsrq(xmm1, rax, 1).unwrap();
         a.movaps(xmmword_ptr(rcx), xmm1).unwrap();
         a.ret().unwrap();
