@@ -21,6 +21,21 @@ mod tests {
 
     #[test]
     #[cfg(target_env = "msvc")]
+    fn test_call() {
+        use iced_x86::code_asm::*;
+        fn test() -> i32  { 0xDEAD }
+        let mut a = CodeAssembler::new(64).unwrap();
+        a.call(rcx).unwrap();
+        a.ret().unwrap();
+
+        let bytecode = virtualize(&a.assemble(0).unwrap());
+        let m = Machine::new(bytecode.as_ptr()).unwrap();
+        let f: extern "C" fn(u64) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        assert_eq!(f(test as *const u64 as u64), 0xDEAD);
+    }
+
+    #[test]
+    #[cfg(target_env = "msvc")]
     fn test_unsupported() {
         use iced_x86::code_asm::*;
         let mut a = CodeAssembler::new(64).unwrap();

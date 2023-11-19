@@ -179,6 +179,7 @@ impl Virtualizer {
                 Mnemonic::Ret => self.ret(),
                 Mnemonic::Push => self.push(&inst),
                 Mnemonic::Pop => self.pop(&inst),
+                // call is executed unvirtualized
                 Mnemonic::Jmp | Mnemonic::Je | Mnemonic::Jne | Mnemonic::Jbe
                 | Mnemonic::Ja | Mnemonic::Jle | Mnemonic::Jg => {
                     if !inst.is_jcc_short_or_near() && !inst.is_jmp_short_or_near() {
@@ -204,7 +205,7 @@ impl Virtualizer {
                 _ => {
                     // check for all control flow altering instructions and give error
                     // those i should all as far as possible add support for
-                    // including call
+                    // excluding call
                     if inst.is_jmp_short() || inst.is_jmp_short_or_near()
                         || inst.is_jmp_near_indirect() || inst.is_jmp_far()
                         || inst.is_jmp_far_indirect() {
