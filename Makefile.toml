@@ -8,7 +8,13 @@ default_to_workspace = false
 [tasks.vm]
 script = [
     "cd vm",
-    "%HOMEDRIVE%/%HOMEPATH%/.cargo/bin/cargo.exe +nightly mommy b --release",
+    "%HOMEDRIVE%/%HOMEPATH%/.cargo/bin/cargo.exe +nightly mommy b --release --target x86_64-pc-windows-msvc",
+]
+
+[tasks.vmx32]
+script = [
+    "cd vm",
+    "%HOMEDRIVE%/%HOMEPATH%/.cargo/bin/cargo.exe +nightly mommy b --release --target i686-pc-windows-msvc",
 ]
 
 [tasks.test]

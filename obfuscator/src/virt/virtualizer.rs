@@ -91,23 +91,30 @@ macro_rules! binary_op {
             load_operand, $inst, 0;
             load_operand, $inst, 1;
         );
-        sized_op!($self, $op, $inst);
+        vmasm_sized!($self, $op, $inst;);
         vmasm!($self,
             store_operand, $inst, 0;
         );
     }}
 }
 
-macro_rules! sized_op {
-    ($self:ident, $op:ident, $inst:ident) => {{
-        match OpSize::try_from($inst).unwrap() {
-            OpSize::Byte => vmasm!($self, $op::<u8>;),
-            OpSize::Word => vmasm!($self, $op::<u16>;),
-            OpSize::Dword => vmasm!($self, $op::<u32>;),
-            OpSize::Qword => vmasm!($self, $op::<u64>;)
+/// Same as vmasm! but determines opcode size automatically
+macro_rules! vmasm_sized {(
+    $self:ident,
+    $(
+        $op:ident, $inst:ident $(, $operand:expr)* ;
+    )*
+) => ({
+    $(
+         match OpSize::try_from($inst).unwrap() {
+            OpSize::Byte => vmasm!($self, $op::<u8> $(,$operand),*;),
+            OpSize::Word => vmasm!($self, $op::<u16> $(,$operand),*;),
+            OpSize::Dword => vmasm!($self, $op::<u32> $(,$operand),*;),
+            OpSize::Qword => vmasm!($self, $op::<u64> $(,$operand),*;)
         }
-    }}
-}
+    )*
+})}
+
 
 struct Virtualizer {
     asm: Assembler,
@@ -221,7 +228,6 @@ impl Virtualizer {
         );
     }
 
-    // todo
     fn movzx(&mut self, inst: &Instruction) {
         vmasm!(self,
             load_operand, inst, 1;
@@ -244,15 +250,11 @@ impl Virtualizer {
             load_operand, inst, 0;
             const_::<u64>, 1;
         );
-        match OpSize::try_from(inst.op0_register()).unwrap() {
-            OpSize::Byte => vmasm!(self, const_::<u8>, 1; add::<u8>;),
-            OpSize::Word => vmasm!(self, const_::<u16>, 1; add::<u16>;),
-            OpSize::Dword => vmasm!(self, const_::<u32>, 1; add::<u32>;),
-            OpSize::Qword => vmasm!(self, const_::<u64>, 1; add::<u64>;),
-        }
-        vmasm!(self,
-            store_operand, inst, 0;
+        vmasm_sized!(self,
+            const_, inst, 1;
+            add, inst;
         );
+        vmasm!(self,store_operand, inst, 0;);
     }
 
     fn dec(&mut self, inst: &Instruction) {
@@ -260,15 +262,11 @@ impl Virtualizer {
             load_operand, inst, 0;
             const_::<u64>, 1;
         );
-        match OpSize::try_from(inst.op0_register()).unwrap() {
-            OpSize::Byte => vmasm!(self, const_::<u8>, 1; sub::<u8>;),
-            OpSize::Word => vmasm!(self, const_::<u16>, 1; sub::<u16>;),
-            OpSize::Dword => vmasm!(self, const_::<u32>, 1; sub::<u32>;),
-            OpSize::Qword => vmasm!(self, const_::<u64>, 1; sub::<u64>;),
-        }
-        vmasm!(self,
-            store_operand, inst, 0;
+        vmasm_sized!(self,
+            const_, inst, 1;
+            sub, inst;
         );
+        vmasm!(self,store_operand, inst, 0;);
     }
 
     fn div(&mut self, inst: &Instruction, signed: bool) {
@@ -319,18 +317,12 @@ impl Virtualizer {
         assert_eq!(inst.op1_kind(), OpKind::Immediate8);
 
         for _ in 0..inst.immediate8() {
-            vmasm!(self,
-                load_operand, inst, 0;
+            vmasm!(self, load_operand, inst, 0;);
+            vmasm_sized!(self,
+                const_, inst, 2;
+                shr, inst;
             );
-            match OpSize::try_from(inst.op0_register()).unwrap() {
-                OpSize::Byte => vmasm!(self, const_::<u8>, 2; shr::<u8>;),
-                OpSize::Word => vmasm!(self, const_::<u16>, 2; shr::<u16>;),
-                OpSize::Dword => vmasm!(self, const_::<u32>, 2; shr::<u32>;),
-                OpSize::Qword => vmasm!(self, const_::<u64>, 2; shr::<u64>;),
-            }
-            vmasm!(self,
-                store_operand, inst, 0;
-            );
+            vmasm!(self, store_operand, inst, 0;);
         }
     }
 
@@ -380,7 +372,7 @@ impl Virtualizer {
                     load_operand, inst, 1;
                     load_operand, inst, 2;
                 );
-                sized_op!(self, mul, inst);
+                vmasm_sized!(self, mul, inst;);
                 vmasm!(self, store_operand, inst, 0;);
             }
             _ => unreachable!()
@@ -401,7 +393,7 @@ impl Virtualizer {
 
     fn not(&mut self, inst: &Instruction) {
         vmasm!(self, load_operand, inst, 0;);
-        sized_op!(self, not, inst);
+        vmasm_sized!(self, not, inst;);
         vmasm!(self, store_operand, inst, 0;);
     }
 
@@ -410,7 +402,7 @@ impl Virtualizer {
             load_operand, inst, 0;
             load_operand, inst, 1;
         );
-        sized_op!(self, cmp, inst);
+        vmasm_sized!(self, cmp, inst;);
     }
 
     // seems to be correct
@@ -452,7 +444,9 @@ impl Virtualizer {
             load_operand, inst, 0;
             load_reg, RSP;
         );
-        sized_op!(self, store, inst);
+        vmasm_sized!(self,
+            store, inst;
+        );
     }
 
     fn pop(&mut self, inst: &Instruction) {
@@ -461,7 +455,9 @@ impl Virtualizer {
         vmasm!(self,
             load_reg, RSP;
         );
-        sized_op!(self, load, inst);
+        vmasm_sized!(self,
+            load, inst;
+        );
         vmasm!(self,
             store_operand, inst, 0;
 
@@ -563,7 +559,7 @@ impl Asm for Virtualizer {
             OpKind::Register => self.load_reg(inst.op_register(operand)),
             OpKind::Memory => {
                 self.lea_operand(inst);
-                sized_op!(self, load, inst);
+                vmasm_sized!(self, load, inst;);
             }
             OpKind::Immediate8 => self.const_(inst.immediate8()),
             OpKind::Immediate8to16 => self.const_(inst.immediate8to16() as u16),
@@ -586,7 +582,7 @@ impl Asm for Virtualizer {
             OpKind::Register => self.store_reg(inst.op_register(operand)),
             OpKind::Memory => {
                 self.lea_operand(inst);
-                sized_op!(self, store, inst);
+                vmasm_sized!(self, store, inst;);
             }
             _ => panic!("unsupported operand"),
         }

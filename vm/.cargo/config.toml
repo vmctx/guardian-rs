@@ -1,7 +1,4 @@
 [build]
-target = "x86_64-pc-windows-msvc"
-# target = "i686-pc-windows-msvc"
-
 rustflags = [
     # "-C", "force-unwind-tables=no",
     "-Z", "location-detail=none",
@@ -24,7 +21,6 @@ rustflags = [
     "-C", "link-arg=/DEBUG:NONE",
     "-C", "link-arg=/MERGE:.rdata=.text",
     #"-C", "link-arg=/MERGE:.data=.text",
-    "-Clink-arg=/MAP:target/x86_64-pc-windows-msvc/release/vm.map"
 ]
 
 [unstable]
