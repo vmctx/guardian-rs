@@ -25,3 +25,8 @@ pub unsafe fn store_reg(vm: &mut Machine, op_size: OpSize) {
         _ => store(vm, op_size)
     };
 }
+
+pub unsafe fn store_reg_zx(vm: &mut Machine, _op_size: OpSize) {
+    let target_addr = vm.stack_pop::<*mut u64>();
+    target_addr.write_unaligned(vm.stack_pop::<u16>() as u64);
+}

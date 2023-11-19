@@ -45,6 +45,7 @@ pub enum Opcode {
     Store,
     StoreXmm,
     StoreReg,
+    StoreRegZx,
     Add,
     Sub,
     Div,
@@ -530,6 +531,10 @@ impl Assembler {
         self.emit_sized::<T>(Opcode::StoreReg);
     }
 
+    pub fn store_reg_zx<T: OpSized>(&mut self) {
+        self.emit_sized::<T>(Opcode::StoreRegZx);
+    }
+
     pub fn add<T: OpSized>(&mut self) {
         self.emit_sized::<T>(Opcode::Add);
     }
@@ -620,6 +625,7 @@ impl Assembler {
 
     pub fn vmexec(&mut self, mut instr: iced_x86::Instruction, image_base: u64) {
         self.emit(Opcode::VmExec);
+        // todo check if immediate and reloc entry
         if instr.is_ip_rel_memory_operand() {
             // todo improve and make sure regs are really not used
             let regs = instr.get_free_regs();

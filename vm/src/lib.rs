@@ -58,6 +58,7 @@ pub enum Opcode {
     Store,
     StoreXmm,
     StoreReg,
+    StoreRegZx,
     Add,
     Sub,
     Div,
@@ -471,6 +472,7 @@ impl Machine {
                 Opcode::Store => handlers::store::store(self, op_size),
                 Opcode::StoreXmm => handlers::store::store_xmm(self, op_size),
                 Opcode::StoreReg => handlers::store::store_reg(self, op_size),
+                Opcode::StoreRegZx => handlers::store::store_reg_zx(self, op_size),
                 Opcode::Div => handlers::div::div(self, op_size),
                 Opcode::IDiv => handlers::div::idiv(self, op_size),
                 Opcode::Shr => handlers::div::shr(self, op_size), // possibly unfinished

@@ -1,4 +1,4 @@
-use crate::{binary_op_save_flags, Machine, OpSize};
+use crate::{Machine, OpSize};
 
 macro_rules! mul_save_flags {
     ($self:ident, $bit:ident, $save_bit:ident) => {{

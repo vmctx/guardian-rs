@@ -38,7 +38,7 @@ mod tests {
     fn test_xmm() {
         use iced_x86::code_asm::*;
         let mut a = CodeAssembler::new(64).unwrap();
-        let mut test = 0x45;
+        let mut test = 0;
         let imm128 = u128::MAX;
         a.mov(rax, (imm128) as u64).unwrap();
         a.movq(xmm1, rax).unwrap();

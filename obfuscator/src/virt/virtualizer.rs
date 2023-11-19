@@ -50,6 +50,7 @@ trait Asm {
     fn store_operand(&mut self, inst: &Instruction, operand: u32);
     fn load_reg(&mut self, reg: iced_x86::Register);
     fn store_reg(&mut self, reg: iced_x86::Register);
+    fn store_reg_zx(&mut self, reg: iced_x86::Register);
     fn lea_operand(&mut self, inst: &Instruction);
 }
 
@@ -152,7 +153,7 @@ impl Virtualizer {
 
             match inst.mnemonic() {
                 Mnemonic::Mov => self.mov(&inst),
-                //Mnemonic::Movzx => self.movzx(&inst),
+                Mnemonic::Movzx => self.movzx(&inst),
                 Mnemonic::Add => self.add(&inst),
                 Mnemonic::Sub => self.sub(&inst),
                 Mnemonic::Div => self.div(&inst, false),
@@ -222,7 +223,7 @@ impl Virtualizer {
     fn movzx(&mut self, inst: &Instruction) {
         vmasm!(self,
             load_operand, inst, 1;
-            store_operand, inst, 0;
+            store_reg_zx, inst.op_register(0);
         );
     }
 
@@ -247,9 +248,9 @@ impl Virtualizer {
                 store_reg, AH;
             ),
             OpSize::Word => vmasm!(self,
-                load_reg, DX; // and ax
-                load_reg, AX; // and ax
-                combine::<u16>; // add dx (16 bit) to ax (16 bit) and push u32?
+                load_reg, DX;
+                load_reg, AX;
+                combine::<u16>;
                 load_operand, inst, 0;
                 div::<u16>, signed;
                 store_reg, AX;
@@ -258,7 +259,7 @@ impl Virtualizer {
             OpSize::Dword => vmasm!(self,
                 load_reg, EDX;
                 load_reg, EAX;
-                combine::<u32>; // add edx (32 bit) to eax (32 bit) and push u64?
+                combine::<u32>;
                 load_operand, inst, 0;
                 div::<u32>, signed;
                 store_reg, EAX;
@@ -633,6 +634,31 @@ impl Asm for Virtualizer {
             || inst.memory_index() != iced_x86::Register::None
         {
             self.asm.vmadd();
+        }
+    }
+
+    // used for movzx
+    fn store_reg_zx(&mut self, reg: iced_x86::Register) {
+        assert_eq!(reg.is_gpr(), true);
+
+        self.asm.vmctx();
+        self.asm.const_(reg.reg_offset());
+        self.asm.vmadd();
+
+        let operand_size = OpSize::try_from(reg.size() as u8).unwrap();
+
+        match operand_size {
+            OpSize::Byte => if reg.is_higher_8_bit() {
+                self.asm.store_reg_zx::<u8>();
+                self.load_reg(reg.get_gpr_16());
+                self.asm.rot_left();
+                self.store_reg_zx(reg.get_gpr_16());
+            } else {
+                self.asm.store_reg_zx::<u8>()
+            },
+            OpSize::Word => self.asm.store_reg_zx::<u16>(),
+            OpSize::Dword => self.asm.store_reg_zx::<u32>(),
+            OpSize::Qword => self.asm.store_reg_zx::<u64>()
         }
     }
 }
