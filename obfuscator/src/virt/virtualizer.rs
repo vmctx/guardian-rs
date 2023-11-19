@@ -310,10 +310,6 @@ impl Virtualizer {
     }
 
     fn shr(&mut self, inst: &Instruction) {
-        // opkind has to be memory or register
-        assert_eq!(inst.op0_kind(), OpKind::Register);
-        assert_eq!(inst.op1_kind(), OpKind::Immediate8);
-
         for _ in 0..inst.immediate8() {
             vmasm!(self, load_operand, inst, 0;);
             vmasm_sized!(self,
