@@ -56,6 +56,31 @@ mod tests {
 
     #[test]
     #[cfg(target_env = "msvc")]
+    fn inc_and_dec() {
+        use iced_x86::code_asm::*;
+        let mut a = CodeAssembler::new(64).unwrap();
+        a.inc(cl).unwrap();
+        a.mov(rax, rcx).unwrap();
+        a.ret().unwrap();
+
+        let bytecode = virtualize(&a.assemble(0).unwrap());
+        let m = Machine::new(bytecode.as_ptr()).unwrap();
+        let f: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        assert_eq!(f(1), 2);
+
+        let mut a = CodeAssembler::new(64).unwrap();
+        a.dec(cl).unwrap();
+        a.mov(rax, rcx).unwrap();
+        a.ret().unwrap();
+
+        let bytecode = virtualize(&a.assemble(0).unwrap());
+        let m = Machine::new(bytecode.as_ptr()).unwrap();
+        let f: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        assert_eq!(f(1), 0);
+    }
+
+    #[test]
+    #[cfg(target_env = "msvc")]
     fn rax_and_ax() {
         use iced_x86::code_asm::*;
         let mut a = CodeAssembler::new(64).unwrap();

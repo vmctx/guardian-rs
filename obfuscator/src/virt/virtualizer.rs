@@ -156,6 +156,8 @@ impl Virtualizer {
                 Mnemonic::Movzx => self.movzx(&inst),
                 Mnemonic::Add => self.add(&inst),
                 Mnemonic::Sub => self.sub(&inst),
+                Mnemonic::Inc => self.inc(&inst),
+                Mnemonic::Dec => self.dec(&inst),
                 Mnemonic::Div => self.div(&inst, false),
                 Mnemonic::Idiv => self.div(&inst, true),
                 Mnemonic::Shr => self.shr(&inst),
@@ -234,6 +236,39 @@ impl Virtualizer {
 
     fn sub(&mut self, inst: &Instruction) {
         binary_op!(self, inst, sub)
+    }
+
+    // todo make inc and dec code shorter
+    fn inc(&mut self, inst: &Instruction) {
+        vmasm!(self,
+            load_operand, inst, 0;
+            const_::<u64>, 1;
+        );
+        match OpSize::try_from(inst.op0_register()).unwrap() {
+            OpSize::Byte => vmasm!(self, const_::<u8>, 1; add::<u8>;),
+            OpSize::Word => vmasm!(self, const_::<u16>, 1; add::<u16>;),
+            OpSize::Dword => vmasm!(self, const_::<u32>, 1; add::<u32>;),
+            OpSize::Qword => vmasm!(self, const_::<u64>, 1; add::<u64>;),
+        }
+        vmasm!(self,
+            store_operand, inst, 0;
+        );
+    }
+
+    fn dec(&mut self, inst: &Instruction) {
+        vmasm!(self,
+            load_operand, inst, 0;
+            const_::<u64>, 1;
+        );
+        match OpSize::try_from(inst.op0_register()).unwrap() {
+            OpSize::Byte => vmasm!(self, const_::<u8>, 1; sub::<u8>;),
+            OpSize::Word => vmasm!(self, const_::<u16>, 1; sub::<u16>;),
+            OpSize::Dword => vmasm!(self, const_::<u32>, 1; sub::<u32>;),
+            OpSize::Qword => vmasm!(self, const_::<u64>, 1; sub::<u64>;),
+        }
+        vmasm!(self,
+            store_operand, inst, 0;
+        );
     }
 
     fn div(&mut self, inst: &Instruction, signed: bool) {
