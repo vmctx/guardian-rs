@@ -155,7 +155,15 @@ macro_rules! binary_op {
 pub(crate) use binary_op;
 
 macro_rules! binary_op_save_flags {
-    ($self:ident, $bit:ident, $op:ident) => {{
+    ($self:ident, $op_size:ident, $op:ident) => {{
+       match $op_size {
+            OpSize::Qword => binary_op_save_flags!($self, u64, $op;),
+            OpSize::Dword => binary_op_save_flags!($self, u32, $op;),
+            OpSize::Word => binary_op_save_flags!($self, u16, $op;),
+            OpSize::Byte => binary_op_save_flags!($self, u8, $op;),
+        }
+    }};
+    ($self:ident, $bit:ident, $op:ident;) => {{
         let (op2, op1) = if core::mem::size_of::<$bit>() == 1 {
             unsafe { ($self.stack_pop::<u16>() as $bit, $self.stack_pop::<u16>() as $bit) }
         } else {
@@ -177,7 +185,15 @@ macro_rules! binary_op_save_flags {
 pub(crate) use binary_op_save_flags;
 
 macro_rules! binary_op_arg1_save_flags {
-    ($self:ident, $bit:ident, $op:ident) => {{
+    ($self:ident, $op_size:ident, $op:ident) => {{
+       match $op_size {
+            OpSize::Qword => binary_op_arg1_save_flags!($self, u64, $op;),
+            OpSize::Dword => binary_op_arg1_save_flags!($self, u32, $op;),
+            OpSize::Word => binary_op_arg1_save_flags!($self, u16, $op;),
+            OpSize::Byte => binary_op_arg1_save_flags!($self, u8, $op;),
+        }
+    }};
+    ($self:ident, $bit:ident, $op:ident;) => {{
         let op1 = if core::mem::size_of::<$bit>() == 1 {
             unsafe { $self.stack_pop::<u16>() as $bit }
         } else {
