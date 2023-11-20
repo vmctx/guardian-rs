@@ -11,6 +11,7 @@ symbolic-common = "12.4.1"
 symbolic-demangle = "12.4.1"
 anyhow = { version = "1.0.75", default-features = false }
 num_enum = { version = "0.6.1", default-features = false }
+num-traits = { version = "0.2.17", default-features = false }
 memoffset = "0.9.0"
 iced-x86 = {version = "1.20.0", default-features = false, features = [
     "no_std", "intel", "decoder", "nasm", "code_asm", "op_code_info", "instr_info"

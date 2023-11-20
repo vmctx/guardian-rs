@@ -1,4 +1,4 @@
-use crate::{binary_op_save_flags, Machine, OpSize};
+use crate::{binary_op_sized, Machine, OpSize};
 
 macro_rules! div_save_flags {
     ($self:ident, $bit:ident, $save_bit:ident) => {{
@@ -34,5 +34,5 @@ pub fn idiv(vm: &mut Machine, op_size: OpSize) {
 }
 
 pub fn shr(vm: &mut Machine, op_size: OpSize) {
-    binary_op_save_flags!(vm, op_size, wrapping_div);
+    binary_op_sized!(vm, op_size, wrapping_div);
 }

@@ -16,6 +16,7 @@ path = "src/lib.rs"
 paste = "1.0.14"
 static_assertions = "1.1.0"
 num_enum.workspace = true
+num-traits.workspace = true
 memoffset.workspace = true
 x86.workspace = true
 winapi = { version = "0.3.9", default-features = false, features = ["ntdef", "basetsd", "winnt"] }
