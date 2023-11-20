@@ -155,7 +155,7 @@ macro_rules! calculate_rflags {
 
         let mut rflags = RFlags::from_bits_truncate($self.rflags);
         ::paste::paste! {
-            let (_, cf) =  $op1.[<overflowing_ $op>]($op2);
+            let (_, cf) =  $op1.[<overflowing_add>]($op2);
             rflags.set(RFlags::FLAGS_OF, (($crate::get_msb($op1) == 0 && $crate::get_msb($op2) == 0)
                 && $crate::get_msb($result) == 1) || (($crate::get_msb($op1) == 1 && $crate::get_msb($op2) == 1)
                 && $crate::get_msb($result) == 0)
@@ -524,19 +524,19 @@ impl Machine {
 
     #[inline(never)]
     unsafe fn stack_push<T: Sized>(&mut self, value: T) {
-        assert_eq!(size_of::<T>() % 2, 0);
+        assert_eq!(size_of::<T>() * 8 % 16, 0);
         // stack overflow
         assert_ne!(self.sp, self.vmstack);
-        self.sp = self.sp.cast::<T>().sub(1) as _;
-        self.sp.cast::<T>().write_unaligned(value);
+        self.sp = self.sp.sub(1) as _;
+        self.sp.cast::<T>().write(value);
     }
 
     #[inline(never)]
     unsafe fn stack_pop<T: Sized>(&mut self) -> T {
-        assert_eq!(size_of::<T>() % 2, 0);
-        let value = self.sp.cast::<T>().read_unaligned();
+        assert_eq!(size_of::<T>() * 8 % 16, 0);
+        let value = self.sp.cast::<T>().read();
         *self.sp.cast::<T>() = core::mem::zeroed();
-        self.sp = self.sp.cast::<T>().add(1) as _;
+        self.sp = self.sp.add(1) as _;
         value
     }
 

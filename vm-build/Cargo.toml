@@ -1,0 +1,22 @@
+[package]
+name = "vm-build"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+# cargo +nightly test --package vm --features testing
+doctest = false
+path = "src/lib.rs"
+
+[dependencies]
+vm = { path = "../vm" }
+
+[dev-dependencies]
+vm = { path = "../vm", features = ["testing"] }
+obfuscator = { path = "../obfuscator" }
+iced-x86.workspace = true
+
+[features]
+default = []
+testing = []

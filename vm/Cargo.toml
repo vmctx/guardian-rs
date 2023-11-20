@@ -5,7 +5,6 @@ edition = "2021"
 build = "build.rs"
 
 [lib]
-crate-type = ["cdylib"]
 # testing
 #crate-type = ["cdylib", "rlib"]
 # cargo +nightly test --package vm --features testing

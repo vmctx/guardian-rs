@@ -1,8 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
-"obfuscator",
-"vm"
+    "obfuscator",
+    "vm-build",
+    "vm"
 ]
 
 [workspace.dependencies]
@@ -18,8 +19,7 @@ iced-x86 = {version = "1.20.0", default-features = false, features = [
 ]}
 
 [profile.dev]
-panic = "abort"
-debug-assertions = false
+
 
 [profile.release]
 panic = "abort"
