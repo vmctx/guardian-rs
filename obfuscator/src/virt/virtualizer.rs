@@ -567,7 +567,7 @@ impl Asm for Virtualizer {
             _ => panic!("unsupported operand: {:?}", inst.op_kind(operand)),
         }
 
-        if inst.op_kind(0) != OpKind::Memory && inst.has_reloc_entry(self.pe.as_ref()) {
+        if inst.op_kind(operand) != OpKind::Memory && inst.has_reloc_entry(self.pe.as_ref()) {
             self.asm.vmreloc(self.image_base);
         }
     }

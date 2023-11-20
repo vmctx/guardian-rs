@@ -168,7 +168,7 @@ macro_rules! calculate_rflags {
         // combined into OF
     }};
      ($self:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, AF) => {{
-        todo!()
+        unimplemented!()
     }};
     ($self:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, ZF) => {{
         use x86::bits64::rflags::RFlags;
