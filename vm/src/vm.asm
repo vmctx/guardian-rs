@@ -86,7 +86,7 @@ fxrestore:
     ret
 
 vmentry:
-   // avoid new_vm call from changing registers like that
+    // avoid new_vm call from changing registers like that
     pushfq // save rflags
     pushvol
     // +8 to 16 byte align stack here
@@ -98,7 +98,6 @@ vmentry:
     jmp vmenter
 
 vmenter:
-    // todo save (store) zmm/ymm/xmm for floating point operations
     add rsp, 0x10 // because i didnt pop the bytecode ptr and rflags yet
     mov [rax + {rax}], rax
     mov [rax + {rcx}], rcx
@@ -155,18 +154,17 @@ vmexit:
     // restore gpr
     mov rax, [rcx + {rax}]
     mov rdx, [rcx + {rdx}]
-    // todo i think this should just restore all gprs
-    // mov rbx, [rcx + {rbx}] // non vol
-    // mov rbp, [rcx + {rbp}] // non vol
-    // mov rsi, [rcx + {rsi}] // non vol
-    // mov rdi, [rcx + {rdi}] // non vol
+    mov rbx, [rcx + {rbx}] // non vol
+    mov rbp, [rcx + {rbp}] // non vol
+    mov rsi, [rcx + {rsi}] // non vol
+    mov rdi, [rcx + {rdi}] // non vol
     mov r8,  [rcx + {r8}]
     mov r9,  [rcx + {r9}]
     mov r10, [rcx + {r10}]
     mov r11, [rcx + {r11}]
-    // mov r12, [rcx + {r12}] // non vol
-    // mov r13, [rcx + {r13}] // non vol
-    // mov r14, [rcx + {r14}] // non vol
-    // mov r15, [rcx + {r15}] // non vol
+    mov r12, [rcx + {r12}] // non vol
+    mov r13, [rcx + {r13}] // non vol
+    mov r14, [rcx + {r14}] // non vol
+    mov r15, [rcx + {r15}] // non vol
     mov rcx, [rcx + {rcx}]
     ret

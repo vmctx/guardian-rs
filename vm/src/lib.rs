@@ -148,7 +148,6 @@ fn get_msb<N: num_traits::PrimInt>(n: N) -> N {
     (n >> shift) & N::one()
 }
 
-// TODO add rest of flags
 macro_rules! calculate_rflags {
     // of also sets cf for now
     ($self:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, OF) => {{
@@ -167,6 +166,9 @@ macro_rules! calculate_rflags {
     }};
     ($self:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, CF) => {{
         // combined into OF
+    }};
+     ($self:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, AF) => {{
+        todo!()
     }};
     ($self:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, ZF) => {{
         use x86::bits64::rflags::RFlags;
@@ -192,7 +194,6 @@ macro_rules! calculate_rflags {
         )+
     };
 }
-
 
 pub(crate) use calculate_rflags;
 
