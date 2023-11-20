@@ -148,9 +148,10 @@ fn get_msb<N: num_traits::PrimInt>(n: N) -> N {
     (n >> shift) & N::one()
 }
 
+// TODO add rest of flags
 macro_rules! calculate_rflags {
     // of also sets cf for now
-    ($self:ident, $signed:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, OF) => {{
+    ($self:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, OF) => {{
         use x86::bits64::rflags::RFlags;
 
         let mut rflags = RFlags::from_bits_truncate($self.rflags);
@@ -164,30 +165,30 @@ macro_rules! calculate_rflags {
         }
         $self.rflags = rflags.bits();
     }};
-    ($self:ident, $signed:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, CF) => {{
+    ($self:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, CF) => {{
         // combined into OF
     }};
-    ($self:ident, $signed:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, ZF) => {{
+    ($self:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, ZF) => {{
         use x86::bits64::rflags::RFlags;
         let mut rflags = RFlags::from_bits_truncate($self.rflags);
         rflags.set(RFlags::FLAGS_ZF, $result == 0);
         $self.rflags = rflags.bits();
     }};
-    ($self:ident, $signed:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, PF) => {{
+    ($self:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, PF) => {{
         use x86::bits64::rflags::RFlags;
         let mut rflags = RFlags::from_bits_truncate($self.rflags);
         rflags.set(RFlags::FLAGS_PF, $result.count_ones() % 2 != 0);
         $self.rflags = rflags.bits();
     }};
-    ($self:ident, $signed:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, SF) => {{
+    ($self:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, SF) => {{
         use x86::bits64::rflags::RFlags;
         let mut rflags = RFlags::from_bits_truncate($self.rflags);
         rflags.set(RFlags::FLAGS_SF, $crate::get_msb($result) == 1);
         $self.rflags = rflags.bits();
     }};
-    ($self:ident, $signed:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, $($flag:ident),+ $(,)?) => {
+    ($self:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, $($flag:ident),+ $(,)?) => {
         $(
-            $crate::calculate_rflags!($self, $signed, $op1, $op2, $result, $op, $flag);
+            $crate::calculate_rflags!($self, $op1, $op2, $result, $op, $flag);
         )+
     };
 }
@@ -237,13 +238,13 @@ pub(crate) use binary_op_sized;
 macro_rules! binary_op_save_flags {
     ($self:ident, $op_size:ident, $op:ident $(, $rflag:ident)*) => {{
        match $op_size {
-            OpSize::Qword => binary_op_save_flags!($self, i64, u64, $op, $($rflag),*;),
-            OpSize::Dword => binary_op_save_flags!($self, i32, u32, $op, $($rflag),*;),
-            OpSize::Word => binary_op_save_flags!($self, i16, u16, $op, $($rflag),*;),
-            OpSize::Byte => binary_op_save_flags!($self, i8, u8, $op, $($rflag),*;),
+            OpSize::Qword => binary_op_save_flags!($self, u64, $op, $($rflag),*;),
+            OpSize::Dword => binary_op_save_flags!($self, u32, $op, $($rflag),*;),
+            OpSize::Word => binary_op_save_flags!($self, u16, $op, $($rflag),*;),
+            OpSize::Byte => binary_op_save_flags!($self, u8, $op, $($rflag),*;),
         }
     }};
-    ($self:ident, $signed_bit:ident, $bit:ident, $op:ident $(, $rflag:ident)* ;) => {{
+    ($self:ident, $bit:ident, $op:ident $(, $rflag:ident)* ;) => {{
         let (op2, op1) = if core::mem::size_of::<$bit>() == 1 {
             unsafe { ($self.stack_pop::<u16>() as $bit, $self.stack_pop::<u16>() as $bit) }
         } else {
@@ -252,7 +253,7 @@ macro_rules! binary_op_save_flags {
 
         let result = op1.$op(op2);
 
-        $crate::calculate_rflags!($self, $signed_bit, op1, op2, result, $op, $($rflag),*);
+        $crate::calculate_rflags!($self, op1, op2, result, $op, $($rflag),*);
 
         //$self.set_rflags();
 
