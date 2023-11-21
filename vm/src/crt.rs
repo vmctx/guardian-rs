@@ -1,5 +1,6 @@
 use core::ffi::c_void;
 
+#[link(name = "minicrt", kind = "static")]
 extern "C" {
     fn mini_memcpy(dest: *mut c_void, src: *const c_void, count: usize) -> *const c_void;
     fn mini_memmove(dest: *mut c_void, src: *const c_void, count: usize) -> *const c_void;

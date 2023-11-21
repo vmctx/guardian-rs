@@ -1,8 +1,10 @@
 #[cfg(not(feature = "testing"))]
 fn main() {
-    println!("cargo:rustc-link-search=C:\\Users\\Joshua\\ClionProjects\\obfuscator\\vm\\libs");
-    println!("cargo:rustc-link-search=libs");
-    println!("cargo:rustc-link-lib=minicrt");
+    use std::path::Path;
+    use std::env;
+
+    let dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+    println!("cargo:rustc-link-search={}", Path::new(&dir).join("libs").display());
 }
 
 #[cfg(feature = "testing")]
