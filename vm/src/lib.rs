@@ -1,4 +1,4 @@
-#![feature(asm_const)]
+#![cfg_attr(not(feature = "testing"), feature(asm_const))]
 
 #![no_std]
 #![cfg_attr(not(feature = "testing"), no_main)]
