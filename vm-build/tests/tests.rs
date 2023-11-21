@@ -58,7 +58,7 @@ mod tests {
         a.mov(rax, (imm128) as u64).unwrap();
         a.movq(xmm1, rax).unwrap();
         a.pinsrq(xmm1, rax, 1).unwrap();
-        a.movaps(xmmword_ptr(rcx), xmm1).unwrap();
+        a.movups(xmmword_ptr(rcx), xmm1).unwrap();
         a.ret().unwrap();
 
         let bytecode = virtualize(&a.assemble(0).unwrap());

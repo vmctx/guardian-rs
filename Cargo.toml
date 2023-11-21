@@ -26,6 +26,6 @@ panic = "abort"
 # produce pdb with this, and remove debug:none in config.toml
 # debug = true
 strip = true
-opt-level = 3
+opt-level = 's'
 lto = true
 #codegen-units = 1
