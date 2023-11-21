@@ -90,7 +90,7 @@ impl Obfuscator {
         let bytecode_section = self.add_section(&bytecode_section, &bytecode).unwrap();
 
         // todo include
-        let vm_file = VecPE::from_disk_file("../target/x86_64-pc-windows-msvc/release/vm.dll").unwrap();
+        let vm_file = VecPE::from_disk_file("../target/x86_64-pc-windows-msvc/release/vm_build.dll").unwrap();
         let vm_file_text = vm_file.get_section_by_name(".text").unwrap().clone();
         let machine_entry = vm_file.get_entrypoint().unwrap();
         println!("vm machine::new: {:x}", machine_entry.0);
