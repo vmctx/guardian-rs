@@ -150,47 +150,51 @@ fn get_msb<N: num_traits::PrimInt>(n: N) -> N {
 
 macro_rules! calculate_rflags {
     // of also sets cf for now
-    ($self:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, OF) => {{
+    ($self:ident, $op1:ident, $op2: ident, $result:ident, OF) => {{
         use x86::bits64::rflags::RFlags;
-
         let mut rflags = RFlags::from_bits_truncate($self.rflags);
-        ::paste::paste! {
-            let (_, cf) =  $op1.[<overflowing_add>]($op2);
-            rflags.set(RFlags::FLAGS_OF, (($crate::get_msb($op1) == 0 && $crate::get_msb($op2) == 0)
-                && $crate::get_msb($result) == 1) || (($crate::get_msb($op1) == 1 && $crate::get_msb($op2) == 1)
-                && $crate::get_msb($result) == 0)
-            );
-            rflags.set(RFlags::FLAGS_CF, cf);
-        }
+        rflags.set(RFlags::FLAGS_OF, (($crate::get_msb($op1) == 0 && $crate::get_msb($op2) == 0)
+            && $crate::get_msb($result) == 1) || (($crate::get_msb($op1) == 1 && $crate::get_msb($op2) == 1)
+            && $crate::get_msb($result) == 0)
+        );
         $self.rflags = rflags.bits();
     }};
-    ($self:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, CF) => {{
-        // combined into OF
+    ($self:ident, $op1:ident, $op2: ident, $result:ident, CF_ADD) => {{
+        use x86::bits64::rflags::RFlags;
+        let mut rflags = RFlags::from_bits_truncate($self.rflags);
+        rflags.set(RFlags::FLAGS_CF, $result < $op1);
+        $self.rflags = rflags.bits();
     }};
-     ($self:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, AF) => {{
+    ($self:ident, $op1:ident, $op2: ident, $result:ident, CF_SUB) => {{
+        use x86::bits64::rflags::RFlags;
+        let mut rflags = RFlags::from_bits_truncate($self.rflags);
+        rflags.set(RFlags::FLAGS_CF, $result > $op1);
+        $self.rflags = rflags.bits();
+    }};
+     ($self:ident, $op1:ident, $op2: ident, $result:ident, AF) => {{
         unimplemented!()
     }};
-    ($self:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, ZF) => {{
+    ($self:ident, $op1:ident, $op2: ident, $result:ident, ZF) => {{
         use x86::bits64::rflags::RFlags;
         let mut rflags = RFlags::from_bits_truncate($self.rflags);
         rflags.set(RFlags::FLAGS_ZF, $result == 0);
         $self.rflags = rflags.bits();
     }};
-    ($self:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, PF) => {{
+    ($self:ident, $op1:ident, $op2: ident, $result:ident, PF) => {{
         use x86::bits64::rflags::RFlags;
         let mut rflags = RFlags::from_bits_truncate($self.rflags);
         rflags.set(RFlags::FLAGS_PF, $result.count_ones() % 2 != 0);
         $self.rflags = rflags.bits();
     }};
-    ($self:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, SF) => {{
+    ($self:ident, $op1:ident, $op2: ident, $result:ident, SF) => {{
         use x86::bits64::rflags::RFlags;
         let mut rflags = RFlags::from_bits_truncate($self.rflags);
         rflags.set(RFlags::FLAGS_SF, $crate::get_msb($result) == 1);
         $self.rflags = rflags.bits();
     }};
-    ($self:ident, $op1:ident, $op2: ident, $result:ident, $op:ident, $($flag:ident),+ $(,)?) => {
+    ($self:ident, $op1:ident, $op2: ident, $result:ident, $($flag:ident),+ $(,)?) => {
         $(
-            $crate::calculate_rflags!($self, $op1, $op2, $result, $op, $flag);
+            $crate::calculate_rflags!($self, $op1, $op2, $result, $flag);
         )+
     };
 }
@@ -254,7 +258,7 @@ macro_rules! binary_op_save_flags {
 
         let result = op1.$op(op2);
 
-        $crate::calculate_rflags!($self, op1, op2, result, $op, $($rflag),*);
+        $crate::calculate_rflags!($self, op1, op2, result, $($rflag),*);
 
         //$self.set_rflags();
 
