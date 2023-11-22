@@ -1,0 +1,14 @@
+[package]
+name = "license_check"
+version = "0.1.0"
+edition = "2021"
+build = "../build.rs"
+
+[workspace]
+
+[dependencies]
+obfstr = "0.4.3"
+
+[profile.release]
+strip = false
+debug = true

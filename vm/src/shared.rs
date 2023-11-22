@@ -50,14 +50,11 @@ pub enum OpSize {
 pub enum JmpCond {
     Jmp,
     Je,
-    Jne,
-    //  Jnz,
-    Jbe,
-    // Jna,
-    Ja,
-    // Jnbe
-    Jle,
-    // Jng
+    Jne, //  Jnz,
+    Jbe, // Jna,
+    Ja, // Jnbe
+    Jae, // jnc
+    Jle, // Jng
     Jg, // Jnle
 }
 

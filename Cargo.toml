@@ -26,6 +26,7 @@ panic = "abort"
 # produce pdb with this, and remove debug:none in config.toml
 # debug = true
 strip = true
-opt-level = 's'
+# opt lvl s and above might add relocs
+opt-level = 3
 lto = true
 #codegen-units = 1

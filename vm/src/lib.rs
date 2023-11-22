@@ -488,6 +488,7 @@ impl Machine {
                             || rflags.contains(RFlags::FLAGS_CF),
                         JmpCond::Ja => !rflags.contains(RFlags::FLAGS_ZF)
                             && !rflags.contains(RFlags::FLAGS_CF),
+                        JmpCond::Jae => !rflags.contains(RFlags::FLAGS_CF),
                         JmpCond::Jle => rflags.contains(RFlags::FLAGS_SF).bitxor(rflags.contains(RFlags::FLAGS_OF))
                             || rflags.contains(RFlags::FLAGS_ZF),
                         JmpCond::Jg => rflags.contains(RFlags::FLAGS_SF) == rflags.contains(RFlags::FLAGS_OF) && !rflags.contains(RFlags::FLAGS_ZF)
@@ -526,6 +527,8 @@ impl Machine {
                     self.pc = self.pc.add(1); // skip instr size
                     reloc_instr(self, instr_size, &mut instructions);
                     instructions.clear();
+
+                    // todo calls need to be relocated else crash
 
                     self.pc = self.pc.add(instr_size);
                 }

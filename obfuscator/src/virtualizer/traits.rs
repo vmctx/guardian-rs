@@ -180,6 +180,7 @@ impl From<iced_x86::Mnemonic> for JmpCond {
             iced_x86::Mnemonic::Jne => JmpCond::Jne, // jnz is jne
             iced_x86::Mnemonic::Jbe => JmpCond::Jbe, // jna is jbe
             iced_x86::Mnemonic::Ja => JmpCond::Ja, // jnbe is ja
+            iced_x86::Mnemonic::Jae => JmpCond::Jae, // Jae is jnc
             iced_x86::Mnemonic::Jle => JmpCond::Jle, // jng is jle
             iced_x86::Mnemonic::Jg => JmpCond::Jg, // Jnle is jg
             _ => panic!("unsupported jmp condition"),

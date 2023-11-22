@@ -57,7 +57,7 @@ trait Asm {
     fn store_operand(&mut self, inst: &Instruction, operand: u32);
     fn load_reg(&mut self, reg: iced_x86::Register);
     fn store_reg(&mut self, reg: iced_x86::Register);
-    fn store_reg_zx(&mut self, reg: iced_x86::Register, from_reg: iced_x86::Register);
+    fn store_reg_zx(&mut self, inst: &Instruction, reg: iced_x86::Register);
     fn lea_operand(&mut self, inst: &Instruction);
 }
 
@@ -152,18 +152,16 @@ impl Virtualizer {
     }
 
     pub fn virtualize_with_ip(&mut self, ip: u64, program: &[u8]) -> Vec<u8> {
+        println!("image_base: {}", self.image_base);
         let mut decoder = Decoder::with_ip(64, program, ip, 0);
         let mut unresolved_jmps = 0;
-        let mut jmp_map = HashMap::<u64, usize>::new();
+        // maps buffer offset (jmp) to ip
+        let mut jmp_map = HashMap::<u64, u64>::new();
+        // maps ip to buffer offset
+        let mut target_map = HashMap::<u64, u64>::new();
 
         for inst in decoder.iter() {
-            if jmp_map.contains_key(&inst.ip()) {
-                self.asm.patch(*jmp_map.get(&inst.ip()).unwrap() + 3, self.asm.len() as u64);
-                jmp_map.remove(&inst.ip()).unwrap();
-                unresolved_jmps -= 1;
-            } else {
-                jmp_map.insert(inst.ip(), self.asm.len());
-            }
+            target_map.insert(inst.ip(), self.asm.len() as u64);
 
             match inst.mnemonic() {
                 Mnemonic::Mov => self.mov(&inst),
@@ -188,7 +186,7 @@ impl Virtualizer {
                 Mnemonic::Pop => self.pop(&inst),
                 // call is executed unvirtualized
                 Mnemonic::Jmp | Mnemonic::Je | Mnemonic::Jne | Mnemonic::Jbe
-                | Mnemonic::Ja | Mnemonic::Jle | Mnemonic::Jg => {
+                | Mnemonic::Ja | Mnemonic::Jle | Mnemonic::Jg | Mnemonic::Jae => {
                     if !inst.is_jcc_short_or_near() && !inst.is_jmp_short_or_near() {
                         let mut output = String::new();
                         NasmFormatter::new().format(&inst, &mut output);
@@ -200,11 +198,11 @@ impl Virtualizer {
                     let target = inst.near_branch_target();
 
                     if target > inst.ip() {
-                        jmp_map.insert(target, self.asm.len());
+                        jmp_map.insert(self.asm.len() as u64, target);
                         self.asm.jmp(condition, 0);
                         unresolved_jmps += 1;
-                    } else if jmp_map.contains_key(&target) {
-                        self.asm.jmp(condition, *jmp_map.get(&target).unwrap() as _);
+                    } else if target_map.contains_key(&target) {
+                        self.asm.jmp(condition, *target_map.get(&target).unwrap());
                     } else {
                         unresolved_jmps += 1;
                     }
@@ -213,15 +211,20 @@ impl Virtualizer {
                     // check for all control flow altering instructions and give error
                     // those i should all as far as possible add support for
                     // excluding call
-                    if inst.is_jmp_short() || inst.is_jmp_short_or_near()
+                    if inst.is_jmp_short_or_near()
                         || inst.is_jmp_near_indirect() || inst.is_jmp_far()
-                        || inst.is_jmp_far_indirect() {
+                        || inst.is_jmp_far_indirect() || inst.is_jcc_short_or_near() {
                         panic!("unsupported");
                     }
 
                     self.asm.vmexec(inst, self.image_base);
                 }
             }
+        }
+
+        for (jmp_offset, ip) in jmp_map.into_iter() {
+            self.asm.patch(jmp_offset as usize + 3, *target_map.get(&ip).unwrap());
+            unresolved_jmps -= 1;
         }
 
         assert_eq!(unresolved_jmps, 0, "unresolved jumps");
@@ -239,7 +242,7 @@ impl Virtualizer {
     fn movzx(&mut self, inst: &Instruction) {
         vmasm!(self,
             load_operand, inst, 1;
-            store_reg_zx, inst.op_register(0), inst.op_register(1);
+            store_reg_zx, inst, inst.op_register(0);
         );
     }
 
@@ -575,6 +578,7 @@ impl Asm for Virtualizer {
         }
 
         if inst.op_kind(operand) != OpKind::Memory && inst.has_reloc_entry(self.pe.as_ref()) {
+            println!("found reloc entry");
             self.asm.vmreloc(self.image_base);
         }
     }
@@ -645,6 +649,7 @@ impl Asm for Virtualizer {
 
     fn lea_operand(&mut self, inst: &Instruction) {
         if inst.memory_base() == iced_x86::Register::RIP {
+            println!("found rip relative instruction");
             self.const_(inst.next_ip());
             self.asm.vmreloc(self.image_base);
         } else if inst.memory_base() != iced_x86::Register::None {
@@ -671,27 +676,17 @@ impl Asm for Virtualizer {
     }
 
     // used for movzx
-    fn store_reg_zx(&mut self, reg: iced_x86::Register, from_reg: iced_x86::Register) {
+    fn store_reg_zx(&mut self, inst: &Instruction, reg: iced_x86::Register) {
         assert_eq!(reg.is_gpr(), true);
 
         self.asm.vmctx();
         self.asm.const_(reg.reg_offset());
         self.asm.vmadd();
 
-        let operand_size = OpSize::try_from(from_reg.size() as u8).unwrap();
-
-        match operand_size {
-            OpSize::Byte => if from_reg.is_higher_8_bit() {
-                self.asm.store_reg_zx::<u8>();
-                self.load_reg(reg.get_gpr_16());
-                self.asm.rot_left();
-                self.store_reg(reg.get_gpr_16());
-            } else {
-                self.asm.store_reg_zx::<u8>()
-            },
+        match OpSize::try_from(inst).unwrap() {
             OpSize::Word => self.asm.store_reg_zx::<u16>(),
-            OpSize::Dword => self.asm.store_reg_zx::<u32>(),
-            OpSize::Qword => self.asm.store_reg_zx::<u64>()
+            OpSize::Byte => self.asm.store_reg_zx::<u8>(),
+            _ => unreachable!()
         }
     }
 }
