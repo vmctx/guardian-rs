@@ -7,12 +7,14 @@ use symbolic_demangle::Demangle;
 
 use crate::diassembler::Disassembler;
 use crate::pe::parser::MapFile;
-use crate::virt::machine::disassemble;
-use crate::virt::virtualizer::virtualize_with_ip;
+use crate::virtualizer::disassembler::disassemble;
+use crate::virtualizer::virtualize_with_ip;
 
-pub mod virt;
+pub mod virtualizer;
 pub mod diassembler;
 pub mod pe;
+#[path = "../../vm/src/shared.rs"]
+mod shared;
 
 pub struct Obfuscator {
     pe: VecPE,

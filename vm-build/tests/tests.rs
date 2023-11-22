@@ -1,7 +1,7 @@
 
 #[cfg(test)]
 mod tests {
-    use obfuscator::virt::virtualizer::virtualize;
+    use obfuscator::virtualizer::virtualize;
     use vm::Machine;
 
     #[test]

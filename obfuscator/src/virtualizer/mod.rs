@@ -3,7 +3,14 @@ use std::collections::HashMap;
 use exe::{PE, RelocationDirectory, VecPE};
 use iced_x86::{Decoder, Formatter, Instruction, Mnemonic, NasmFormatter, OpKind};
 
-use crate::virt::machine::{Assembler, HigherLower8Bit, JmpCond, MachineRegOffset, OpSize, OpSized, RegUp};
+use traits::*;
+
+use crate::shared::{JmpCond, OpSize};
+use crate::virtualizer::assembler::Assembler;
+
+pub mod assembler;
+pub mod disassembler;
+mod traits;
 
 trait Reloc {
     fn has_reloc_entry(&self, pe: Option<&VecPE>) -> bool;

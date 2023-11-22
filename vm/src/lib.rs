@@ -22,6 +22,7 @@ use crate::assembler::{Asm, Imm64, Reg64, RegXmm};
 use crate::assembler::prelude::{Mov, MovAps, Pop, Push};
 use crate::assembler::Reg64::*;
 use crate::assembler::RegXmm::*;
+use crate::shared::*;
 
 #[cfg(not(feature = "testing"))]
 #[panic_handler]
@@ -46,102 +47,7 @@ pub mod assembler;
 static ALLOCATOR: allocator::Allocator = allocator::Allocator;
 
 mod allocator;
-
-#[repr(u8)]
-#[derive(PartialEq, Copy, Clone)]
-#[derive(Debug, num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
-pub enum Opcode {
-    Const,
-    Load,
-    LoadXmm,
-    // only diff is that 32 bit doesnt cast as 64 bit ptr
-    Store,
-    StoreXmm,
-    StoreReg,
-    StoreRegZx,
-    Add,
-    Sub,
-    Div,
-    IDiv,
-    Shr,
-    Combine,
-    Split,
-    Mul,
-    And,
-    Or,
-    Xor,
-    Not,
-    Cmp,
-    RotR,
-    RotL,
-    //
-    Jmp,
-    Vmctx,
-    VmAdd,
-    VmMul,
-    VmSub,
-    VmReloc,
-    VmExec,
-    VmExit,
-}
-
-#[repr(u8)]
-#[derive(Debug, num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
-pub enum JmpCond {
-    Jmp,
-    Je,
-    Jne,
-    //  Jnz,
-    Jbe,
-    // Jna,
-    Ja,
-    // Jnbe
-    Jle,
-    // Jng
-    Jg, // Jnle
-}
-
-#[repr(u8)]
-#[derive(num_enum::IntoPrimitive)]
-pub enum Register {
-    Rax,
-    Rcx,
-    Rdx,
-    Rbx,
-    Rsp,
-    Rbp,
-    Rsi,
-    Rdi,
-    R8,
-    R9,
-    R10,
-    R11,
-    R12,
-    R13,
-    R14,
-    R15,
-}
-
-#[repr(u8)]
-#[derive(num_enum::IntoPrimitive)]
-pub enum XmmRegister {
-    Xmm0,
-    Xmm1,
-    Xmm2,
-    Xmm3,
-    Xmm4,
-    Xmm5,
-    Xmm6,
-    Xmm7,
-    Xmm8,
-    Xmm9,
-    Xmm10,
-    Xmm11,
-    Xmm12,
-    Xmm13,
-    Xmm14,
-    Xmm15,
-}
+mod shared;
 
 fn get_msb<N: num_traits::PrimInt>(n: N) -> N {
     let shift = size_of::<N>() * 8 - 1;
@@ -321,15 +227,6 @@ macro_rules! rotate {
 
 pub(crate) use rotate;
 
-#[repr(u8)]
-#[derive(Debug, Copy, Clone, num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
-pub enum OpSize {
-    Byte = 1,
-    Word = 2,
-    Dword = 4,
-    Qword = 8,
-}
-
 #[repr(C, align(16))]
 pub struct Machine {
     pc: *const u8,
@@ -344,15 +241,6 @@ pub struct Machine {
     cpustack: alloc::vec::Vec<u8>,
     #[cfg(feature = "testing")]
     pub vmenter: region::Allocation,
-}
-
-#[repr(C, align(16))]
-pub struct XSaveMin {
-    #[cfg(target_pointer_width = "64")]
-    xmm_registers: [u128; 16],
-    #[cfg(target_pointer_width = "32")]
-    xmm_registers: [u128; 8],
-    float_registers: [u128; 8],
 }
 
 // check why anything bigger than this causes issues with my example program
@@ -621,9 +509,9 @@ impl Machine {
                     let current_image_base;
 
                     asm!(
-                        "mov rax, qword ptr gs:[0x60]",
-                        "mov {}, [rax + 0x10]",
-                        out(reg) current_image_base
+                    "mov rax, qword ptr gs:[0x60]",
+                    "mov {}, [rax + 0x10]",
+                    out(reg) current_image_base
                     );
 
                     let addr = self.stack_pop::<u64>()
