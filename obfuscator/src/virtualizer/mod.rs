@@ -217,7 +217,11 @@ impl Virtualizer {
                         panic!("unsupported");
                     }
 
-                    self.asm.vmexec(inst, self.image_base);
+                    if inst.is_call_near() {
+                        self.asm.call(inst, self.image_base);
+                    } else {
+                        self.asm.vmexec(inst, self.image_base);
+                    }
                 }
             }
         }

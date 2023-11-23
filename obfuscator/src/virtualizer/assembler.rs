@@ -154,6 +154,29 @@ impl Assembler {
         self.emit_const::<u64>(image_base);
     }
 
+    pub fn call(&mut self, mut instr: iced_x86::Instruction, image_base: u64) {
+        self.emit(Opcode::VmExec);
+
+        let regs = instr.get_non_vol_free_regs();
+        assert!(regs.len() >= 2);
+
+        let mut asm = CodeAssembler::new(64).unwrap();
+        asm.push(regs[0]).unwrap();
+        asm.push(regs[1]).unwrap();
+        asm.mov(regs[0], instr.near_branch_target() - image_base).unwrap();
+        asm.mov(regs[1], qword_ptr(0x60).gs()).unwrap();
+        asm.mov(regs[1], qword_ptr(regs[1] + 0x10)).unwrap();
+        asm.add(regs[0], regs[1]).unwrap();
+        asm.pop(regs[1]).unwrap();
+        //
+        asm.call(regs[0]).unwrap();
+        //
+        asm.pop(regs[0]).unwrap();
+        let instr_buffer = asm.assemble(0).unwrap();
+        self.emit_const(instr_buffer.len() as u8);
+        self.program.extend_from_slice(&instr_buffer);
+    }
+
     pub fn vmexec(&mut self, mut instr: iced_x86::Instruction, image_base: u64) {
         self.emit(Opcode::VmExec);
         // todo check if immediate and reloc entry

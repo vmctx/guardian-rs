@@ -19,7 +19,7 @@ use x86::bits64::rflags::RFlags;
 
 use crate::allocator::Protection;
 use crate::assembler::{Asm, Imm64, Reg64, RegXmm};
-use crate::assembler::prelude::{Mov, MovAps, Pop, Push};
+use crate::assembler::prelude::{Call, Mov, MovAps, Pop, Push};
 use crate::assembler::Reg64::*;
 use crate::assembler::RegXmm::*;
 use crate::shared::*;
@@ -525,7 +525,7 @@ impl Machine {
                 Opcode::VmExec => {
                     let instr_size = self.pc.read_unaligned() as usize;
                     self.pc = self.pc.add(1); // skip instr size
-                    reloc_instr(self, instr_size, &mut instructions);
+                    reloc_instr(self, self.pc, instr_size, &mut instructions);
                     instructions.clear();
 
                     // todo calls need to be relocated else crash
@@ -556,7 +556,7 @@ impl Machine {
 }
 
 #[inline(never)]
-pub fn reloc_instr(vm: &mut Machine, instr_size: usize, instr_buffer: &mut Vec<u8>) {
+pub fn reloc_instr(vm: &mut Machine, instr_ptr: *const u8, instr_size: usize, instr_buffer: &mut Vec<u8>) {
     let mut non_vol_regs: [u64; 9] = [0, 0, 0, 0, 0, 0, 0, 0, 0];
 
     let non_vol_regmap: &[&Reg64] = &[
@@ -627,7 +627,7 @@ pub fn reloc_instr(vm: &mut Machine, instr_size: usize, instr_buffer: &mut Vec<u
         asm.mov(**reg, assembler::MemOp::IndirectDisp(rcx, offset as i32));
     }
 
-    let instructions = unsafe { slice::from_raw_parts(vm.pc, instr_size) };
+    let instructions = unsafe { slice::from_raw_parts(instr_ptr, instr_size) };
     asm.code().extend_from_slice(instructions);
 
     asm.push(rax); // this decreases rsp need to adjust
