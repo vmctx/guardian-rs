@@ -117,7 +117,7 @@ vmenter:
     mov [rax + {r15}], r15
     sub rsp, 0x10 // fix stack ptr back to be able to pop it
     pop rcx // pop rflags into rcx
-    //mov [rax + {rflags}], rcx
+    mov [rax + {rflags}], rcx
     // &mut Machine
     mov rcx,          rax
     // save floating point and xmm regs

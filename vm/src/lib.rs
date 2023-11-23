@@ -19,7 +19,7 @@ use x86::bits64::rflags::RFlags;
 
 use crate::allocator::Protection;
 use crate::assembler::{Asm, Imm64, Reg64, RegXmm};
-use crate::assembler::prelude::{Call, Mov, MovAps, Pop, Push};
+use crate::assembler::prelude::*;
 use crate::assembler::Reg64::*;
 use crate::assembler::RegXmm::*;
 use crate::shared::*;
@@ -622,9 +622,13 @@ pub fn reloc_instr(vm: &mut Machine, instr_ptr: *const u8, instr_size: usize, in
         asm.mov(assembler::MemOp::IndirectDisp(rdx, offset as i32), **reg);
     }
 
+    asm.mov(rax, MemOp::IndirectDisp(rcx, offset_of!(Machine, rflags) as i32));
+    asm.push(rax);
+    asm.popfq();
+
     for (reg, regid) in regmap.iter() {
         let offset = offset_of!(Machine, regs) + *regid as usize * 8;
-        asm.mov(**reg, assembler::MemOp::IndirectDisp(rcx, offset as i32));
+        asm.mov(**reg, MemOp::IndirectDisp(rcx, offset as i32));
     }
 
     let instructions = unsafe { slice::from_raw_parts(instr_ptr, instr_size) };
@@ -653,20 +657,26 @@ pub fn reloc_instr(vm: &mut Machine, instr_ptr: *const u8, instr_size: usize, in
     for (reg, regid) in xmm_regmap.iter() {
         let offset = memoffset::offset_of!(Machine, fxsave)
             + memoffset::offset_of!(XSaveMin, xmm_registers) + *regid as usize * 16;
-        asm.movaps(assembler::MemOp::IndirectDisp(rax, offset as i32), **reg);
+        asm.movaps(MemOp::IndirectDisp(rax, offset as i32), **reg);
     }
 
     for (reg, regid) in regmap.iter() {
         let offset = offset_of!(Machine, regs) + *regid as usize * 8;
-        asm.mov(assembler::MemOp::IndirectDisp(rax, offset as i32), **reg);
+        asm.mov(MemOp::IndirectDisp(rax, offset as i32), **reg);
     }
 
     // save rax too
     asm.mov(rcx, rax);
+
+    // savef rflags
+    asm.pushfq();
+    asm.pop(rax);
+    asm.mov(MemOp::IndirectDisp(rcx, offset_of!(Machine, rflags) as i32), rax);
+
     asm.pop(rax);
     // save rsp after stack ptr is adjusted again
-    asm.mov(assembler::MemOp::IndirectDisp(rcx, offset_of!(Machine, regs) as i32 + (Register::Rsp as u8 as usize * 8) as i32), rsp);
-    asm.mov(assembler::MemOp::IndirectDisp(rcx, offset_of!(Machine, regs) as i32), rax);
+    asm.mov(MemOp::IndirectDisp(rcx, offset_of!(Machine, regs) as i32 + (Register::Rsp as u8 as usize * 8) as i32), rsp);
+    asm.mov(MemOp::IndirectDisp(rcx, offset_of!(Machine, regs) as i32), rax);
 
     asm.mov(rax, Imm64::from(non_vol_regs.as_mut_ptr() as u64));
 

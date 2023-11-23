@@ -18,9 +18,19 @@ pub trait Push<T> {
     fn push(&mut self, op1: T);
 }
 
+pub trait PushFQ {
+    /// Emit a pushfq instruction.
+    fn pushfq(&mut self);
+}
+
 pub trait Pop<T> {
     /// Emit a pop instruction.
     fn pop(&mut self, op1: T);
+}
+
+pub trait PopFQ {
+    /// Emit a popfq instruction.
+    fn popfq(&mut self);
 }
 
 pub trait Add<T, U> {

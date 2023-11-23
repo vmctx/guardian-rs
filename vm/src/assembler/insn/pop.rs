@@ -11,3 +11,9 @@ impl Pop<Reg32> for Asm<'_> {
         self.encode_r(0x8f, 0, op1);
     }
 }
+
+impl PopFQ for Asm<'_> {
+    fn popfq(&mut self) {
+        self.emit(&[0x9D]);
+    }
+}

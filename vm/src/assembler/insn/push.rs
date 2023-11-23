@@ -11,3 +11,9 @@ impl Push<Reg32> for Asm<'_> {
         self.encode_r(0xff, 6, op1);
     }
 }
+
+impl PushFQ for Asm<'_> {
+    fn pushfq(&mut self) {
+        self.emit(&[0x9C]);
+    }
+}

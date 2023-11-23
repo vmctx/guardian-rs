@@ -2,7 +2,7 @@ use std::ptr::read_unaligned;
 
 use anyhow::Result;
 use iced_x86::{Encoder, InstructionInfoFactory, MemorySize, OpKind};
-use iced_x86::code_asm::{CodeAssembler, qword_ptr, rsp};
+use iced_x86::code_asm::{CodeAssembler, qword_ptr, rax, rsp};
 use memoffset::offset_of;
 use super::traits::{OpSized, FreeReg};
 
@@ -157,24 +157,15 @@ impl Assembler {
     pub fn call(&mut self, mut instr: iced_x86::Instruction, image_base: u64) {
         self.emit(Opcode::VmExec);
 
-        let regs = instr.get_non_vol_free_regs();
-        assert!(regs.len() >= 2);
+       // let regs = instr.get_non_vol_free_regs();
+        //assert!(regs.len() >= 2);
 
         let mut asm = CodeAssembler::new(64).unwrap();
-        // todo this misaligns the stack, the function can take stack arguments
-        asm.push(regs[0]).unwrap();
-        asm.push(regs[1]).unwrap();
-        asm.mov(regs[0], instr.near_branch_target() - image_base).unwrap();
-        asm.mov(regs[1], qword_ptr(0x60).gs()).unwrap();
-        asm.mov(regs[1], qword_ptr(regs[1] + 0x10)).unwrap();
-        asm.add(regs[0], regs[1]).unwrap();
-        asm.pop(regs[1]).unwrap();
-        asm.add(rsp, 8i32).unwrap();
-        //
-        asm.call(regs[0]).unwrap();
-        asm.sub(rsp, 8i32).unwrap();
-        //
-        asm.pop(regs[0]).unwrap();
+        asm.mov(rax, qword_ptr(0x60).gs()).unwrap();
+        asm.mov(rax, qword_ptr(rax + 0x10)).unwrap();
+        asm.add(rax, (instr.near_branch_target() - image_base) as i32).unwrap();
+        asm.call(rax).unwrap();
+
         let instr_buffer = asm.assemble(0).unwrap();
         self.emit_const(instr_buffer.len() as u8);
         self.program.extend_from_slice(&instr_buffer);
