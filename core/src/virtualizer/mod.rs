@@ -167,7 +167,7 @@ impl Virtualizer {
                     if !inst.is_jcc_short_or_near() && !inst.is_jmp_short_or_near() {
                         let mut output = String::new();
                         NasmFormatter::new().format(&inst, &mut output);
-                        panic!("unsupported jmp: {}", output);
+                        anyhow::bail!("unsupported jmp: {}", output);
                     }
 
                     let condition = JmpCond::from(inst.mnemonic());
@@ -191,16 +191,16 @@ impl Virtualizer {
                     if inst.is_jmp_short_or_near()
                         || inst.is_jmp_near_indirect() || inst.is_jmp_far()
                         || inst.is_jmp_far_indirect() || inst.is_jcc_short_or_near() {
-                        panic!("unsupported");
+                        anyhow::bail!("unsupported jmp instruction");
                     }
 
                     // todo bug in license_check
                     // doesnt jmp in jne cmp rax, rdx even tho should
 
                     if inst.is_call_near() {
-                        self.asm.call(inst, self.image_base);
+                        self.asm.call(inst, self.image_base)?;
                     } else {
-                        self.asm.vmexec(inst, self.image_base);
+                        self.asm.vmexec(inst, self.image_base)?;
                     }
                 }
             }

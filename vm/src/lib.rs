@@ -92,7 +92,6 @@ impl Machine {
     pub fn new(program: *const u8) -> anyhow::Result<Self> {
         use alloc::vec;
         use core::mem::forget;
-        use iced_x86::code_asm::*;
 
         let mut vmstack = vec![0u64; VM_STACK_SIZE];
 
@@ -110,7 +109,7 @@ impl Machine {
         forget(vmstack);
 
         // Generate VMENTER.
-        let regmap: &[(&AsmRegister64, u8)] = &[
+        let regmap: &[(&Reg64, u8)] = &[
             (&rax, Register::Rax.into()),
             (&rcx, Register::Rcx.into()),
             (&rdx, Register::Rdx.into()),
@@ -129,20 +128,21 @@ impl Machine {
             (&r15, Register::R15.into()),
         ];
 
-        let mut a = CodeAssembler::new(64).unwrap();
+        let mut buffer = Vec::new();
+        let mut a = Asm::new(&mut buffer);
 
-        a.mov(rax, &mut m as *mut _ as u64).unwrap();
+        a.mov(rax, Imm64::from(&mut m as *mut _ as u64));
 
         // Store the GPRs
         for (reg, regid) in regmap.iter() {
             let offset = memoffset::offset_of!(Machine, regs) + *regid as usize * 8;
-            a.mov(qword_ptr(rax + offset), **reg).unwrap();
+            a.mov(MemOp::IndirectDisp(rax, offset as i32), **reg);
         }
 
         // save rflags
-        a.pushfq().unwrap();
-        a.pop(rcx).unwrap();
-        a.mov(qword_ptr(rax + memoffset::offset_of!(Machine, rflags)), rcx).unwrap();
+        a.pushfq();
+        a.pop(rcx);
+        a.mov(MemOp::IndirectDisp(rax, memoffset::offset_of!(Machine, rflags) as i32), rcx);
 
         // Switch to the VM's CPU stack.
         let vm_rsp = unsafe {
@@ -151,11 +151,11 @@ impl Machine {
                 .add(m.cpustack.len() - 0x100 - (size_of::<u64>() * 2)) as u64
         };
         assert_eq!(vm_rsp % 16, 0);
-        a.mov(rsp, vm_rsp).unwrap();
+        a.mov(rsp, Imm64::from(vm_rsp));
 
-        a.mov(rcx, rax).unwrap();
+        a.mov(rcx, rax);
 
-        let xmm_regmap: &[(&AsmRegisterXmm, u8)] = &[
+        let xmm_regmap: &[(&RegXmm, u8)] = &[
             (&xmm0, XmmRegister::Xmm0.into()),
             (&xmm1, XmmRegister::Xmm1.into()),
             (&xmm2, XmmRegister::Xmm2.into()),
@@ -177,15 +177,15 @@ impl Machine {
         for (reg, regid) in xmm_regmap.iter() {
             let offset = memoffset::offset_of!(Machine, fxsave)
                 + memoffset::offset_of!(XSaveMin, xmm_registers) + *regid as usize * 16;
-            a.movaps(xmmword_ptr(rcx + offset), **reg).unwrap();
+            a.movaps(MemOp::IndirectDisp(rcx, offset as i32), **reg);
         }
 
-        a.mov(rdx, program as u64).unwrap();
-        a.mov(rax, Machine::run as u64).unwrap();
-        a.call(rax).unwrap();
+        a.mov(rdx, Imm64::from(program as u64));
+        a.mov(rax, Imm64::from(Machine::run as u64));
+        a.call(rax);
 
         // Generate VMEXIT.
-        let regmap: &[(&AsmRegister64, u8)] = &[
+        let regmap: &[(&Reg64, u8)] = &[
             (&rax, Register::Rax.into()),
             (&rdx, Register::Rdx.into()),
             (&rbx, Register::Rbx.into()),
@@ -204,33 +204,31 @@ impl Machine {
             (&rcx, Register::Rcx.into()),
         ];
 
-        a.mov(rcx, &mut m as *mut _ as u64).unwrap();
+        a.mov(rcx, Imm64::from(&mut m as *mut _ as u64));
 
         // restore rflags
-        a.mov(rax, qword_ptr(rcx + memoffset::offset_of!(Machine, rflags))).unwrap();
-        a.push(rax).unwrap();
-        a.popfq().unwrap();
+        a.mov(rax, MemOp::IndirectDisp(rcx, memoffset::offset_of!(Machine, rflags) as i32));
+        a.push(rax);
+        a.popfq();
 
         // restore xmm regs
 
         for (reg, regid) in xmm_regmap.iter() {
             let offset = memoffset::offset_of!(Machine, fxsave)
                 + memoffset::offset_of!(XSaveMin, xmm_registers) + *regid as usize * 16;
-            a.movaps(**reg, xmmword_ptr(rcx + offset)).unwrap();
+            a.movaps(**reg, MemOp::IndirectDisp(rcx, offset as i32));
         }
 
         // Restore the GPRs
         for (reg, regid) in regmap.iter() {
             let offset = memoffset::offset_of!(Machine, regs) + *regid as usize * 8;
-            a.mov(**reg, qword_ptr(rcx + offset)).unwrap();
+            a.mov(**reg, MemOp::IndirectDisp(rcx, offset as i32));
         }
 
-        a.ret().unwrap();
-
-        let insts = a.assemble(m.vmenter.as_ptr::<u64>() as u64).unwrap();
+        a.ret();
 
         unsafe {
-            core::ptr::copy(insts.as_ptr(), m.vmenter.as_mut_ptr(), insts.len());
+            core::ptr::copy(buffer.as_ptr(), m.vmenter.as_mut_ptr(), buffer.len());
         };
 
 

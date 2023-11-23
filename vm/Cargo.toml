@@ -23,8 +23,7 @@ hashbrown = "0.14.1"
 # only testing
 anyhow = { workspace = true, optional = true }
 region = { version = "3.0.0", optional = true }
-iced-x86 = { workspace = true, optional = true }
 
 [features]
 default = []
-testing = ["region", "iced-x86", "anyhow"]
+testing = ["region", "anyhow"]

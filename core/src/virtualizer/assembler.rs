@@ -1,12 +1,10 @@
-use std::ptr::read_unaligned;
+use iced_x86::Encoder;
+use iced_x86::code_asm::{CodeAssembler, qword_ptr, rax};
 
-use anyhow::Result;
-use iced_x86::{Encoder, InstructionInfoFactory, MemorySize, OpKind};
-use iced_x86::code_asm::{CodeAssembler, qword_ptr, rax, rsp};
-use memoffset::offset_of;
-use super::traits::{OpSized, FreeReg};
-
+use crate::ok;
 use crate::shared::*;
+
+use super::traits::{FreeReg, OpSized};
 
 #[repr(C)]
 pub struct Machine {
@@ -154,24 +152,22 @@ impl Assembler {
         self.emit_const::<u64>(image_base);
     }
 
-    pub fn call(&mut self, mut instr: iced_x86::Instruction, image_base: u64) {
+    pub fn call(&mut self, instr: iced_x86::Instruction, image_base: u64) -> anyhow::Result<()> {
         self.emit(Opcode::VmExec);
 
-       // let regs = instr.get_non_vol_free_regs();
-        //assert!(regs.len() >= 2);
-
-        let mut asm = CodeAssembler::new(64).unwrap();
-        asm.mov(rax, qword_ptr(0x60).gs()).unwrap();
-        asm.mov(rax, qword_ptr(rax + 0x10)).unwrap();
-        asm.add(rax, (instr.near_branch_target() - image_base) as i32).unwrap();
+        let mut asm = CodeAssembler::new(64)?;
+        asm.mov(rax, qword_ptr(0x60).gs())?;
+        asm.mov(rax, qword_ptr(rax + 0x10))?;
+        asm.add(rax, (instr.near_branch_target() - image_base) as i32)?;
         asm.call(rax).unwrap();
 
-        let instr_buffer = asm.assemble(0).unwrap();
+        let instr_buffer = asm.assemble(0)?;
         self.emit_const(instr_buffer.len() as u8);
         self.program.extend_from_slice(&instr_buffer);
+        ok()
     }
 
-    pub fn vmexec(&mut self, mut instr: iced_x86::Instruction, image_base: u64) {
+    pub fn vmexec(&mut self, mut instr: iced_x86::Instruction, image_base: u64) -> anyhow::Result<()> {
         self.emit(Opcode::VmExec);
         // todo check if immediate and reloc entry
         if instr.is_ip_rel_memory_operand() {
@@ -179,30 +175,30 @@ impl Assembler {
             let regs = instr.get_free_regs();
             assert!(regs.len() >= 2);
 
-            let mut asm = CodeAssembler::new(64).unwrap();
-            asm.push(regs[0]).unwrap();
-            asm.push(regs[1]).unwrap();
-            asm.mov(regs[0], instr.next_ip() - image_base).unwrap();
-            asm.mov(regs[1], qword_ptr(0x60).gs()).unwrap();
-            asm.mov(regs[1], qword_ptr(regs[1] + 0x10)).unwrap();
-            asm.add(regs[0], regs[1]).unwrap();
-            asm.pop(regs[1]).unwrap();
-            //
+            let mut asm = CodeAssembler::new(64)?;
+            asm.push(regs[0])?;
+            asm.push(regs[1])?;
+            asm.mov(regs[0], instr.next_ip() - image_base)?;
+            asm.mov(regs[1], qword_ptr(0x60).gs())?;
+            asm.mov(regs[1], qword_ptr(regs[1] + 0x10))?;
+            asm.add(regs[0], regs[1])?;
+            asm.pop(regs[1])?;
             instr.set_memory_base(iced_x86::Register::from(regs[0]));
-            asm.add_instruction(instr).unwrap();
-            //
-            asm.pop(regs[0]).unwrap();
+            asm.add_instruction(instr)?;
+            asm.pop(regs[0])?;
 
-            let instr_buffer = asm.assemble(0).unwrap();
+            let instr_buffer = asm.assemble(0)?;
             self.emit_const(instr_buffer.len() as u8);
             self.program.extend_from_slice(&instr_buffer);
         } else {
             let mut encoder = Encoder::new(64);
-            encoder.encode(&instr, instr.ip()).unwrap();
+            encoder.encode(&instr, instr.ip())?;
             let instr_buffer = encoder.take_buffer();
             self.emit_const(instr_buffer.len() as u8);
             self.program.extend_from_slice(&instr_buffer);
         }
+
+        ok()
     }
 
     pub fn vmexit(&mut self) {

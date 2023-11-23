@@ -1,13 +1,9 @@
-use std::ops::BitXor;
 use anyhow::anyhow;
-
-use exe::{Buffer, CCharString, Error, ImageSectionHeader, PE, PEType, RVA, SectionCharacteristics, VecPE};
+use exe::{Buffer, Error, ImageSectionHeader, PE, PEType, RVA, SectionCharacteristics, VecPE};
 use iced_x86::code_asm::CodeAssembler;
 use include_crypt::{EncryptedFile, include_crypt};
-use symbolic_demangle::Demangle;
 
 use crate::pe::parser::MapFile;
-use crate::virtualizer::disassembler::disassemble;
 use crate::virtualizer::virtualize_with_ip;
 
 pub mod virtualizer;
