@@ -2,7 +2,7 @@ use std::ptr::read_unaligned;
 
 use anyhow::Result;
 use iced_x86::{Encoder, InstructionInfoFactory, MemorySize, OpKind};
-use iced_x86::code_asm::{CodeAssembler, qword_ptr};
+use iced_x86::code_asm::{CodeAssembler, qword_ptr, rsp};
 use memoffset::offset_of;
 use super::traits::{OpSized, FreeReg};
 
@@ -161,6 +161,7 @@ impl Assembler {
         assert!(regs.len() >= 2);
 
         let mut asm = CodeAssembler::new(64).unwrap();
+        // todo this misaligns the stack, the function can take stack arguments
         asm.push(regs[0]).unwrap();
         asm.push(regs[1]).unwrap();
         asm.mov(regs[0], instr.near_branch_target() - image_base).unwrap();
@@ -168,8 +169,10 @@ impl Assembler {
         asm.mov(regs[1], qword_ptr(regs[1] + 0x10)).unwrap();
         asm.add(regs[0], regs[1]).unwrap();
         asm.pop(regs[1]).unwrap();
+        asm.add(rsp, 8i32).unwrap();
         //
         asm.call(regs[0]).unwrap();
+        asm.sub(rsp, 8i32).unwrap();
         //
         asm.pop(regs[0]).unwrap();
         let instr_buffer = asm.assemble(0).unwrap();
