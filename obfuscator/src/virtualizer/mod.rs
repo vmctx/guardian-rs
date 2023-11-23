@@ -217,6 +217,9 @@ impl Virtualizer {
                         panic!("unsupported");
                     }
 
+                    // todo bug in license_check
+                    // doesnt jmp in jne cmp rax, rdx even tho should
+
                     if inst.is_call_near() {
                         self.asm.call(inst, self.image_base);
                     } else {
@@ -262,7 +265,6 @@ impl Virtualizer {
     fn inc(&mut self, inst: &Instruction) {
         vmasm!(self,
             load_operand, inst, 0;
-            const_::<u64>, 1;
         );
         vmasm_sized!(self,
             const_, inst, 1;
