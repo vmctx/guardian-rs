@@ -91,6 +91,7 @@ and if you have any questions u can contact me on discord [@felixfem](https://di
 - [cursey/x64-virtualizer-rs](https://github.com/cursey/x64-virtualizer-rs)
 for the awesome help and repo this project is based on ^-^
 - [unknowntrojan/mapparse](https://github.com/unknowntrojan/mapparse) for his .map file parser
+- [johannst/juicebox-asm](https://github.com/johannst/juicebox-asm/tree/main) for their jit assembler
 
 ## License
 
