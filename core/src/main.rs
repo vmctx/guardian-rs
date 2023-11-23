@@ -3,17 +3,20 @@ use clap::Parser;
 use clap_derive::Parser;
 
 
-/// Simple program to greet a person
+/// Virtualize x86 PE files
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-   /// Name of the person to greet
+   /// Path to the input file
    #[arg(short, long)]
    r#in: String,
+   /// Path to output destination
    #[arg(short, long)]
    out: String,
    #[arg(short, long)]
+   /// Path to .map file
    map_file: String,
+   /// Array of functions names (demangled) to virtualize
    #[clap(value_parser, num_args = 1.., value_delimiter = ',')]
    functions: Vec<String>,
 }
