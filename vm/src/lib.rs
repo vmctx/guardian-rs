@@ -243,8 +243,7 @@ pub struct Machine {
     pub vmenter: region::Allocation,
 }
 
-// check why anything bigger than this causes issues with my example program
-#[cfg(not(feature = "testing"))]
+// alignment check
 static_assertions::const_assert_eq!(core::mem::size_of::<Machine>() % 16, 0);
 
 impl Machine {
@@ -414,21 +413,25 @@ impl Machine {
         Ok(m)
     }
 
+    // write unaligned because it expects 8 byte alignment
+    // this stack is always 16 bit aligned
     #[inline(never)]
     unsafe fn stack_push<T: Sized>(&mut self, value: T) {
         assert_eq!(size_of::<T>() * 8 % 16, 0);
         // stack overflow
         assert_ne!(self.sp, self.vmstack);
-        self.sp = self.sp.sub(1) as _;
-        self.sp.cast::<T>().write(value);
+        self.sp = self.sp.cast::<T>().sub(1) as _;
+        self.sp.cast::<T>().write_unaligned(value);
     }
 
+    // write unaligned because it expects 8 byte alignment
+    // this stack is always 16 bit aligned
     #[inline(never)]
     unsafe fn stack_pop<T: Sized>(&mut self) -> T {
         assert_eq!(size_of::<T>() * 8 % 16, 0);
         let value = self.sp.cast::<T>().read();
-        *self.sp.cast::<T>() = core::mem::zeroed();
-        self.sp = self.sp.add(1) as _;
+        self.sp.cast::<T>().write_unaligned(core::mem::zeroed());
+        self.sp = self.sp.cast::<T>().add(1) as _;
         value
     }
 

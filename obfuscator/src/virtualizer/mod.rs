@@ -152,7 +152,6 @@ impl Virtualizer {
     }
 
     pub fn virtualize_with_ip(&mut self, ip: u64, program: &[u8]) -> Vec<u8> {
-        println!("image_base: {}", self.image_base);
         let mut decoder = Decoder::with_ip(64, program, ip, 0);
         let mut unresolved_jmps = 0;
         // maps buffer offset (jmp) to ip
@@ -584,7 +583,6 @@ impl Asm for Virtualizer {
         }
 
         if inst.op_kind(operand) != OpKind::Memory && inst.has_reloc_entry(self.pe.as_ref()) {
-            println!("found reloc entry");
             self.asm.vmreloc(self.image_base);
         }
     }
@@ -654,11 +652,8 @@ impl Asm for Virtualizer {
     }
 
     fn lea_operand(&mut self, inst: &Instruction) {
-        if inst.memory_base() == iced_x86::Register::RIP {
-            println!("found rip relative instruction");
-            self.const_(inst.next_ip());
-            self.asm.vmreloc(self.image_base);
-        } else if inst.memory_base() != iced_x86::Register::None {
+        if inst.memory_base() != iced_x86::Register::None
+            && inst.memory_base() != iced_x86::Register::RIP {
             self.load_reg(inst.memory_base());
         }
 
@@ -673,6 +668,10 @@ impl Asm for Virtualizer {
         }
 
         self.asm.const_(inst.memory_displacement64());
+
+        if inst.memory_base() == iced_x86::Register::RIP {
+            self.asm.vmreloc(self.image_base);
+        }
 
         if inst.memory_base() != iced_x86::Register::None
             || inst.memory_index() != iced_x86::Register::None
