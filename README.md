@@ -90,7 +90,7 @@ and if you have any questions u can contact me on discord [@felixfem](https://di
 ## Credits
 - [cursey/x64-virtualizer-rs](https://github.com/cursey/x64-virtualizer-rs)
 for the awesome help and repo this project is based on ^-^
-- [unknowntrojan](https://github.com/unknowntrojan) for his .map file parser
+- [unknowntrojan/mapparse](https://github.com/unknowntrojan/mapparse) for his .map file parser
 
 ## License
 
