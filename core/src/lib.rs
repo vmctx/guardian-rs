@@ -134,9 +134,8 @@ impl Obfuscator {
 
     fn patch_fn(&mut self, target_fn: &Routine, vm_rva: u32, bytecode_rva: u32) -> usize {
         let mut a = CodeAssembler::new(64).unwrap();
-        // todo if target isnt a function, but a block of code then push rip + size of this
-        // on stack for return address
         a.push(bytecode_rva as i32).unwrap();
+        // for macro support use call here instead if macro
         a.jmp(vm_rva as u64 - target_fn.rva.0 as u64).unwrap();
 
         let patch = a.assemble(0).unwrap();

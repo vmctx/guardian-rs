@@ -194,13 +194,10 @@ impl Virtualizer {
                         anyhow::bail!("unsupported jmp instruction");
                     }
 
-                    // todo bug in license_check
-                    // doesnt jmp in jne cmp rax, rdx even tho should
-
                     if inst.is_call_near() {
                         self.asm.call(inst, self.image_base)?;
                     } else {
-                        self.asm.vmexec(inst, self.image_base)?;
+                        self.asm.vmexec(inst, self.pe.as_ref(), self.image_base)?;
                     }
                 }
             }

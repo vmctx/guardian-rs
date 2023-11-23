@@ -1,3 +1,4 @@
+use exe::VecPE;
 use iced_x86::Encoder;
 use iced_x86::code_asm::{CodeAssembler, qword_ptr, rax};
 
@@ -152,13 +153,13 @@ impl Assembler {
         self.emit_const::<u64>(image_base);
     }
 
-    pub fn call(&mut self, instr: iced_x86::Instruction, image_base: u64) -> anyhow::Result<()> {
+    pub fn call(&mut self, inst: iced_x86::Instruction, image_base: u64) -> anyhow::Result<()> {
         self.emit(Opcode::VmExec);
 
         let mut asm = CodeAssembler::new(64)?;
         asm.mov(rax, qword_ptr(0x60).gs())?;
         asm.mov(rax, qword_ptr(rax + 0x10))?;
-        asm.add(rax, (instr.near_branch_target() - image_base) as i32)?;
+        asm.add(rax, (inst.near_branch_target() - image_base) as i32)?;
         asm.call(rax).unwrap();
 
         let instr_buffer = asm.assemble(0)?;
@@ -167,24 +168,24 @@ impl Assembler {
         ok()
     }
 
-    pub fn vmexec(&mut self, mut instr: iced_x86::Instruction, image_base: u64) -> anyhow::Result<()> {
+    pub fn vmexec(&mut self, mut inst: iced_x86::Instruction, _pe: Option<&VecPE>, image_base: u64) -> anyhow::Result<()> {
         self.emit(Opcode::VmExec);
         // todo check if immediate and reloc entry
-        if instr.is_ip_rel_memory_operand() {
-            // todo improve and make sure regs are really not used
-            let regs = instr.get_free_regs();
+        // inst.has_reloc_entry(pe)
+        if inst.is_ip_rel_memory_operand()  {
+            let regs = inst.get_free_regs();
             assert!(regs.len() >= 2);
 
             let mut asm = CodeAssembler::new(64)?;
             asm.push(regs[0])?;
             asm.push(regs[1])?;
-            asm.mov(regs[0], instr.next_ip() - image_base)?;
+            asm.mov(regs[0], inst.next_ip() - image_base)?;
             asm.mov(regs[1], qword_ptr(0x60).gs())?;
             asm.mov(regs[1], qword_ptr(regs[1] + 0x10))?;
             asm.add(regs[0], regs[1])?;
             asm.pop(regs[1])?;
-            instr.set_memory_base(iced_x86::Register::from(regs[0]));
-            asm.add_instruction(instr)?;
+            inst.set_memory_base(iced_x86::Register::from(regs[0]));
+            asm.add_instruction(inst)?;
             asm.pop(regs[0])?;
 
             let instr_buffer = asm.assemble(0)?;
@@ -192,7 +193,7 @@ impl Assembler {
             self.program.extend_from_slice(&instr_buffer);
         } else {
             let mut encoder = Encoder::new(64);
-            encoder.encode(&instr, instr.ip())?;
+            encoder.encode(&inst, inst.ip())?;
             let instr_buffer = encoder.take_buffer();
             self.emit_const(instr_buffer.len() as u8);
             self.program.extend_from_slice(&instr_buffer);

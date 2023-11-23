@@ -353,8 +353,6 @@ impl Machine {
                     reloc_instr(self, self.pc, instr_size, &mut instructions);
                     instructions.clear();
 
-                    // todo calls need to be relocated else crash
-
                     self.pc = self.pc.add(instr_size);
                 }
                 Opcode::VmExit => break
