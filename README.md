@@ -82,6 +82,25 @@ Make sure to add `~/.cargo/bin` directory to your `PATH` variable.<br>
 
    obfuscator usage to be added..
 
+### Usage
+
+```console
+> guardian --help
+Virtualize x86 PE files
+
+Usage: guardian.exe --in <IN> --out <OUT> --map-file <MAP_FILE> [FUNCTIONS]...
+
+Arguments:
+  [FUNCTIONS]...  Array of functions names (demangled) to virtualize
+
+Options:
+  -i, --in <IN>              Path to the input file
+  -o, --out <OUT>            Path to output destination
+  -m, --map-file <MAP_FILE>  Path to .map file
+  -h, --help                 Print help
+  -V, --version              Print version
+```
+
 ## Contributing
 
 If you're interested in improving the project feel free to create a PR
