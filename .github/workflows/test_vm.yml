@@ -2,9 +2,9 @@ name: Rust
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,15 +13,11 @@ jobs:
   test:
 
     runs-on: windows-latest
-    strategy:
-      matrix:
-        toolchain:
-          - stable
-          - beta
-          - nightly
 
     steps:
+    - uses: Swatinem/rust-cache@v2.7.0
     - uses: actions/checkout@v3
-    - run: rustup update ${{ matrix.toolchain }} && rustup default ${{ matrix.toolchain }}
+    - run: rustup update nightly
+    - run: rustup update && rustup default stable
     - name: Run tests
-      run: cargo test --verbose --all-features --package vm-build
+      run: cargo test --all-features

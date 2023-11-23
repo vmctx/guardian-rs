@@ -1,6 +1,8 @@
 # guardian-rs
 This is my x86-64 code virtualizer I decided to open-source, although work will continue mostly on a private version, im open to [contributions and questions](#contributing)!
 
+32-bit support probably soon :3
+
 ### Obfuscator Features
 - Virtualization of functions within a binary given a .map file
 - Embeds .text section of VM into target binary
@@ -79,8 +81,10 @@ Make sure to add `~/.cargo/bin` directory to your `PATH` variable.<br>
    ```bash
    cargo make test
    ```
-
-   obfuscator usage to be added..
+5. To compile the vm as position independent dll (all code in .text section)
+   ```bash
+   cargo make vm
+   ```
 
 ### Usage
 
