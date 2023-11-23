@@ -1,9 +1,30 @@
 use iced_x86::{InstructionInfoFactory, MemorySize, OpKind};
+use exe::{PE, RelocationDirectory, VecPE};
 use memoffset::offset_of;
 use num_enum::TryFromPrimitiveError;
 
 use crate::shared::{JmpCond, OpSize, Register, XSaveMin, XmmRegister};
 use crate::virtualizer::assembler::Machine;
+
+pub trait Reloc {
+    fn has_reloc_entry(&self, pe: Option<&VecPE>) -> bool;
+}
+
+impl Reloc for iced_x86::Instruction {
+    fn has_reloc_entry(&self, pe: Option<&VecPE>) -> bool {
+        let Some(pe) = pe else { return false; };
+        let pe_image_base = pe.get_image_base().unwrap();
+
+        let relocation_table = RelocationDirectory::parse(pe).unwrap();
+        let relocations = relocation_table.relocations(pe, pe_image_base)
+            .unwrap();
+
+        let instr_rva = (self.ip() - pe_image_base) as u32;
+        relocations.iter().find(|(rva, _)| {
+            rva.0 >= instr_rva && rva.0 < instr_rva + self.len() as u32
+        }).is_some()
+    }
+}
 
 pub trait OpSized: Sized {
     fn to_le_bytes(self) -> Vec<u8>;

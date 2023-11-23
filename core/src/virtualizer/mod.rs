@@ -1,6 +1,6 @@
 use std::collections::HashMap;
+use exe::{PE, VecPE};
 
-use exe::{PE, RelocationDirectory, VecPE};
 use iced_x86::{Decoder, Formatter, Instruction, Mnemonic, NasmFormatter, OpKind};
 
 use traits::*;
@@ -11,26 +11,6 @@ use crate::virtualizer::assembler::Assembler;
 pub mod assembler;
 pub mod disassembler;
 mod traits;
-
-trait Reloc {
-    fn has_reloc_entry(&self, pe: Option<&VecPE>) -> bool;
-}
-
-impl Reloc for iced_x86::Instruction {
-    fn has_reloc_entry(&self, pe: Option<&VecPE>) -> bool {
-        let Some(pe) = pe else { return false; };
-        let pe_image_base = pe.get_image_base().unwrap();
-
-        let relocation_table = RelocationDirectory::parse(pe).unwrap();
-        let relocations = relocation_table.relocations(pe, pe_image_base)
-            .unwrap();
-
-        let instr_rva = (self.ip() - pe_image_base) as u32;
-        relocations.iter().find(|(rva, _)| {
-            rva.0 >= instr_rva && rva.0 < instr_rva + self.len() as u32
-        }).is_some()
-    }
-}
 
 trait Asm {
     fn const_<T: OpSized>(&mut self, v: T);
@@ -122,7 +102,6 @@ macro_rules! vmasm_sized {(
     )*
 })}
 
-
 struct Virtualizer {
     asm: Assembler,
     pe: Option<VecPE>,
@@ -138,20 +117,19 @@ impl Virtualizer {
         }
     }
 
-    pub fn with_pe(pe: VecPE) -> Self {
-        Self {
+    pub fn with_pe(pe: VecPE) -> anyhow::Result<Self> {
+        Ok(Self {
             asm: Assembler::default(),
-            image_base: pe.get_image_base()
-                .expect("invalid pe file"),
+            image_base: pe.get_image_base()?,
             pe: Some(pe),
-        }
+        })
     }
 
-    pub fn virtualize(&mut self, program: &[u8]) -> Vec<u8> {
+    pub fn virtualize(&mut self, program: &[u8]) -> anyhow::Result<Vec<u8>> {
         self.virtualize_with_ip(0, program)
     }
 
-    pub fn virtualize_with_ip(&mut self, ip: u64, program: &[u8]) -> Vec<u8> {
+    pub fn virtualize_with_ip(&mut self, ip: u64, program: &[u8]) -> anyhow::Result<Vec<u8>> {
         let mut decoder = Decoder::with_ip(64, program, ip, 0);
         let mut unresolved_jmps = 0;
         // maps buffer offset (jmp) to ip
@@ -233,9 +211,9 @@ impl Virtualizer {
             unresolved_jmps -= 1;
         }
 
-        assert_eq!(unresolved_jmps, 0, "unresolved jumps");
+        anyhow::ensure!(unresolved_jmps == 0, "{unresolved_jmps} unresolved jmps");
 
-        self.asm.assemble()
+        Ok(self.asm.assemble())
     }
 
     fn mov(&mut self, inst: &Instruction) {
@@ -696,10 +674,10 @@ impl Asm for Virtualizer {
     }
 }
 
-pub fn virtualize(program: &[u8]) -> Vec<u8> {
+pub fn virtualize(program: &[u8]) -> anyhow::Result<Vec<u8>> {
     Virtualizer::new().virtualize(program)
 }
 
-pub fn virtualize_with_ip(pe: VecPE, ip: u64, program: &[u8]) -> Vec<u8> {
-    Virtualizer::with_pe(pe).virtualize_with_ip(ip, program)
+pub fn virtualize_with_ip(pe: VecPE, ip: u64, program: &[u8]) -> anyhow::Result<Vec<u8>> {
+    Virtualizer::with_pe(pe)?.virtualize_with_ip(ip, program)
 }

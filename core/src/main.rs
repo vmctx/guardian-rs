@@ -1,4 +1,3 @@
-use std::env::current_dir;
 use guardian::Obfuscator;
 use clap::Parser;
 use clap_derive::Parser;
@@ -22,14 +21,14 @@ struct Args {
 fn main() {
    let args = Args::parse();
    assert!(!args.functions.is_empty());
-   println!("{:?}", current_dir().unwrap());
+
    let mut obfuscator = Obfuscator::new(
       args.r#in,
       args.out
    ).unwrap().with_map_file(args.map_file);
    obfuscator.add_functions( args.functions).unwrap();
 
-   obfuscator.virtualize();
+   obfuscator.virtualize().unwrap();
 }
 // virtualization of code that is in between a call of function like begin_virtualization and end_virtualization
 // which are imported from a stub dll, the code is virtualized, a machine is created from the virtual code and the

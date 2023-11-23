@@ -18,7 +18,6 @@ use reg::Reg;
 pub enum MemOp {
     /// An indirect memory operand, eg `mov [rax], rcx`.
     Indirect(Reg64),
-
     /// An indirect memory operand with additional displacement, eg `mov [rax + 0x10], rcx`.
     IndirectDisp(Reg64, i32),
 }

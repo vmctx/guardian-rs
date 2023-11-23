@@ -6,13 +6,11 @@ use iced_x86::code_asm::CodeAssembler;
 use include_crypt::{EncryptedFile, include_crypt};
 use symbolic_demangle::Demangle;
 
-use crate::diassembler::Disassembler;
 use crate::pe::parser::MapFile;
 use crate::virtualizer::disassembler::disassemble;
 use crate::virtualizer::virtualize_with_ip;
 
 pub mod virtualizer;
-pub mod diassembler;
 pub mod pe;
 #[path = "../../vm/src/shared.rs"]
 mod shared;
@@ -63,28 +61,20 @@ impl Obfuscator {
     }
 
     pub fn add_function(&mut self, function: String) -> anyhow::Result<()> {
-        let Some(map_file) = &self.map_file else {
-            anyhow::bail!("no map file provided");
-        };
-        let (function, function_size) = map_file.get_function(&function).ok_or(
-            anyhow!("couldn't find function '{function}'")
-        )?;
+        let map_file = self.map_file.as_ref()
+            .ok_or(anyhow!("no map file provided"))?;
+        let (function, function_size) = map_file.get_function(&function)
+            .ok_or(anyhow!("couldn't find function '{function}'"))?;
         self.functions.push(Routine { rva: RVA(function.rva.0 as u32), len: function_size });
         Ok(())
     }
 
     pub fn add_functions(&mut self, functions: Vec<String>) -> anyhow::Result<()> {
-        for function in functions {
-            self.add_function(function)?;
-        }
-        Ok(())
+        functions.into_iter().try_for_each(|function| self.add_function(function))
     }
 
-    pub fn virtualize(&mut self) {
-        // relocating will probably be done dynamically
-        // have to mark them as relocate somehow
-        // but for jmps i need to be able to identify label with target
-        let (bytecode, virtualized_fns) = self.virtualize_fns();
+    pub fn virtualize(&mut self) -> anyhow::Result<()> {
+        let (bytecode, virtualized_fns) = self.virtualize_fns()?;
 
         let mut bytecode_section = ImageSectionHeader::default();
         bytecode_section.set_name(Some(".byte"));
@@ -97,7 +87,6 @@ impl Obfuscator {
         let vm_file = VecPE::from_disk_data(VM.decrypt().as_slice());
         let vm_file_text = vm_file.get_section_by_name(".text").unwrap().clone();
         let machine_entry = vm_file.get_entrypoint().unwrap();
-        println!("vm machine::new: {:x}", machine_entry.0);
 
         let machine = vm_file.read(vm_file_text.data_offset(self.pe.get_type()), vm_file_text.size_of_raw_data as _)
             .unwrap();
@@ -114,59 +103,55 @@ impl Obfuscator {
 
         for function in virtualized_fns.iter() {
             self.patch_fn(
-                function.routine.rva,
-                function.routine.len,
+                &function.routine,
                 vm_section.virtual_address.0 + machine_entry.0 - 0x1000,
                 bytecode_section.virtual_address.0 + function.bytecode_rva.0,
             );
         }
 
-        self.pe.recreate_image(PEType::Disk).unwrap();
-        self.pe.save(&self.path_out).unwrap();
+        self.pe.recreate_image(PEType::Disk)?;
+        self.pe.save(&self.path_out)?;
+        ok()
     }
 
-
-    fn virtualize_fns(&mut self) -> (Vec<u8>, Vec<VirtualizedRoutine>) {
+    fn virtualize_fns(&mut self) -> anyhow::Result<(Vec<u8>, Vec<VirtualizedRoutine>)> {
         let mut bytecode = Vec::new();
         let mut virtualized_fns = Vec::new();
 
         for function in &self.functions {
             let target_fn_addr = self.pe.rva_to_offset(function.rva).unwrap().0 as _;
             let target_function = self.pe.get_slice_ref::<u8>(target_fn_addr, function.len).unwrap();
-            let function_size = Disassembler::from_bytes(target_function.to_vec()).disassemble();
-            // get again but with "real" (padding removed) size
-            let target_function = self.pe.get_slice_ref::<u8>(target_fn_addr, function_size).unwrap();
             let mut virtualized_function = virtualize_with_ip(
                 self.pe.clone(),
                 self.pe.get_image_base().unwrap() + function.rva.0 as u64,
                 target_function,
-            );
+            )?;
             virtualized_fns.push(VirtualizedRoutine {
-                routine: Routine { rva: RVA(function.rva.0 as u32), len: function_size },
+                routine: Routine { rva: RVA(function.rva.0 as u32), len: function.len },
                 bytecode_rva: RVA(bytecode.len() as u32),
             });
             bytecode.append(&mut virtualized_function);
         }
 
-        (bytecode, virtualized_fns)
+        Ok((bytecode, virtualized_fns))
     }
 
-    fn patch_fn(&mut self, target_fn: RVA, target_fn_size: usize, vm_rva: u32, bytecode_rva: u32) -> usize {
+    fn patch_fn(&mut self, target_fn: &Routine, vm_rva: u32, bytecode_rva: u32) -> usize {
         let mut a = CodeAssembler::new(64).unwrap();
         // todo if target isnt a function, but a block of code then push rip + size of this
         // on stack for return address
         a.push(bytecode_rva as i32).unwrap();
-        a.jmp(vm_rva as u64 - target_fn.0 as u64).unwrap();
+        a.jmp(vm_rva as u64 - target_fn.rva.0 as u64).unwrap();
 
         let patch = a.assemble(0).unwrap();
 
-        let target_fn_offset = self.pe.rva_to_offset(target_fn).unwrap();
+        let target_fn_offset = self.pe.rva_to_offset(target_fn.rva).unwrap();
         let target_function_mut = self.pe.get_mut_slice_ref::<u8>(target_fn_offset.0 as usize, patch.len()).unwrap();
         target_function_mut.copy_from_slice(patch.as_slice());
 
         self.remove_routine(Routine {
-            rva: RVA(target_fn.0 + patch.len() as u32),
-            len: target_fn_size - patch.len(),
+            rva: RVA(target_fn.rva.0 + patch.len() as u32),
+            len: target_fn.len - patch.len(),
         });
 
         self.pe.pad_to_alignment().unwrap();
@@ -199,3 +184,6 @@ impl Obfuscator {
     }
 }
 
+fn ok<E>() -> Result<(), E> {
+    Ok(())
+}

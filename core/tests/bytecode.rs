@@ -12,7 +12,7 @@ fn virtualize_push_pop() {
     a.add(rax, rcx).unwrap();
     a.ret().unwrap();
 
-    let bytecode = disassemble(&virtualize(&a.assemble(0).unwrap()))
+    let bytecode = disassemble(&virtualize(&a.assemble(0).unwrap()).unwrap())
         .unwrap();
 
     assert_eq!(bytecode.as_str(), "\
