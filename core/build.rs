@@ -12,4 +12,5 @@ fn main() {
         .current_dir(path)
         .args(&["b", "--release", "--target", "x86_64-pc-windows-msvc"])
         .status().unwrap();
+    panic!("{:?}", path);
 }

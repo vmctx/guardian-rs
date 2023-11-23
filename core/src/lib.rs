@@ -11,7 +11,7 @@ pub mod pe;
 #[path = "../../vm/src/shared.rs"]
 mod shared;
 
-const VM: EncryptedFile = include_crypt!("../target/x86_64-pc-windows-msvc/release/vm_build.dll");
+const VM: EncryptedFile = include_crypt!("..\\target\\x86_64-pc-windows-msvc\\release\\vm_build.dll");
 
 pub struct Obfuscator {
     pe: VecPE,
