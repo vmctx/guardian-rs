@@ -1,5 +1,5 @@
 [package]
-name = "vm"
+name = "guardian-vm"
 version = "0.1.0"
 edition = "2021"
 build = "build.rs"
@@ -24,9 +24,6 @@ hashbrown = "0.14.1"
 anyhow = { workspace = true, optional = true }
 region = { version = "3.0.0", optional = true }
 iced-x86 = { workspace = true, optional = true }
-
-[dev-dependencies]
-obfuscator = { path = "../obfuscator" }
 
 [features]
 default = []

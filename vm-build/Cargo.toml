@@ -10,11 +10,11 @@ doctest = false
 path = "src/lib.rs"
 
 [dependencies]
-vm = { path = "../vm" }
+guardian-vm = { path = "../vm" }
 
 [dev-dependencies]
-vm = { path = "../vm", features = ["testing"] }
-obfuscator = { path = "../obfuscator" }
+guardian-vm = { path = "../vm", features = ["testing"] }
+guardian-core = { path = "../core" }
 iced-x86.workspace = true
 
 [features]

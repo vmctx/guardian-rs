@@ -1,4 +1,4 @@
-use obfuscator::Obfuscator;
+use guardian_core::Obfuscator;
 
 // virtualization of code that is in between a call of function like begin_virtualization and end_virtualization
 // which are imported from a stub dll, the code is virtualized, a machine is created from the virtual code and the

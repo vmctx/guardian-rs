@@ -1,5 +1,5 @@
-use obfuscator::virtualizer::disassembler::disassemble;
-use obfuscator::virtualizer::virtualize;
+use guardian_core::virtualizer::disassembler::disassemble;
+use guardian_core::virtualizer::virtualize;
 
 #[test]
 #[cfg(target_env = "msvc")]

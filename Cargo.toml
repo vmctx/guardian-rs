@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-    "obfuscator",
+    "core",
     "vm-build",
     "vm"
 ]

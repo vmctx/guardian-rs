@@ -1,8 +1,8 @@
 
 #[cfg(test)]
 mod tests {
-    use obfuscator::virtualizer::virtualize;
-    use vm::Machine;
+    use guardian_core::virtualizer::virtualize;
+    use guardian_vm::Machine;
 
     #[test]
     #[cfg(target_env = "msvc")]
