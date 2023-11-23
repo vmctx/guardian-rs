@@ -1,7 +1,8 @@
 [package]
-name = "guardian-core"
+name = "guardian"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
 
 [lib]
 path = "src/lib.rs"
@@ -16,10 +17,14 @@ memoffset.workspace = true
 x86.workspace = true
 iced-x86.workspace = true
 #
+clap = "4.4.8"
+clap_derive = "4.4.7"
+#
 exe = "0.5.6"
 dynasm = "2.0.0"
 symbolic-common = "12.4.1"
 symbolic-demangle = "12.4.1"
+include-crypt = "0.1.1"
 
 [dev-dependencies]
 test-binary = "3.0.1"

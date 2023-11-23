@@ -1,3 +1,6 @@
+[toolchain]
+channel = "nightly"
+
 [build]
 rustflags = [
     # "-C", "force-unwind-tables=no",

@@ -1,7 +1,7 @@
 
 #[cfg(test)]
 mod tests {
-    use guardian_core::virtualizer::virtualize;
+    use guardian::virtualizer::virtualize;
     use guardian_vm::Machine;
 
     #[test]

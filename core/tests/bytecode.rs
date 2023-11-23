@@ -1,5 +1,5 @@
-use guardian_core::virtualizer::disassembler::disassemble;
-use guardian_core::virtualizer::virtualize;
+use guardian::virtualizer::disassembler::disassemble;
+use guardian::virtualizer::virtualize;
 
 #[test]
 #[cfg(target_env = "msvc")]

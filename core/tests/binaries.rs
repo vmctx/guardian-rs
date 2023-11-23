@@ -2,7 +2,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::{ExitStatus, Stdio};
 use test_binary::TestBinary;
-use guardian_core::Obfuscator;
+use guardian::Obfuscator;
 
 #[test]
 fn binary_hello_world() {

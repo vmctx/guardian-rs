@@ -3,6 +3,7 @@ use anyhow::anyhow;
 
 use exe::{Buffer, CCharString, Error, ImageSectionHeader, PE, PEType, RVA, SectionCharacteristics, VecPE};
 use iced_x86::code_asm::CodeAssembler;
+use include_crypt::{EncryptedFile, include_crypt};
 use symbolic_demangle::Demangle;
 
 use crate::diassembler::Disassembler;
@@ -15,6 +16,8 @@ pub mod diassembler;
 pub mod pe;
 #[path = "../../vm/src/shared.rs"]
 mod shared;
+
+const VM: EncryptedFile = include_crypt!("../target/x86_64-pc-windows-msvc/release/vm_build.dll");
 
 pub struct Obfuscator {
     pe: VecPE,
@@ -91,8 +94,7 @@ impl Obfuscator {
 
         let bytecode_section = self.add_section(&bytecode_section, &bytecode).unwrap();
 
-        // todo include
-        let vm_file = VecPE::from_disk_file("../target/x86_64-pc-windows-msvc/release/vm_build.dll").unwrap();
+        let vm_file = VecPE::from_disk_data(VM.decrypt().as_slice());
         let vm_file_text = vm_file.get_section_by_name(".text").unwrap().clone();
         let machine_entry = vm_file.get_entrypoint().unwrap();
         println!("vm machine::new: {:x}", machine_entry.0);

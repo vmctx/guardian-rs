@@ -14,7 +14,7 @@ guardian-vm = { path = "../vm" }
 
 [dev-dependencies]
 guardian-vm = { path = "../vm", features = ["testing"] }
-guardian-core = { path = "../core" }
+guardian = { path = "../core" }
 iced-x86.workspace = true
 
 [features]
