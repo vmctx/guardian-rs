@@ -7,15 +7,14 @@ use crate::shared::*;
 
 use super::traits::{FreeReg, OpSized};
 
+// only used for offsets
 #[repr(C)]
 pub struct Machine {
-    pub(crate) pc: *const u8,
-    pub(crate) sp: *mut u64,
+    pc: *const u8,
+    sp: *mut u64,
     pub regs: [u64; 16],
     pub fxsave: XSaveMin,
-    pub rflags: u64,
-    pub vmstack: *mut u64,
-    pub cpustack: *mut u8,
+    rflags: u64
 }
 
 #[derive(Default)]

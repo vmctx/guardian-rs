@@ -55,7 +55,7 @@ mod macros;
 pub struct Machine {
     pc: *const u8,
     sp: *mut u64,
-    pub regs: [u64; 16],
+    regs: [u64; 16],
     fxsave: XSaveMin,
     rflags: u64,
     vmstack: *mut u64,
@@ -74,8 +74,6 @@ impl Machine {
     #[no_mangle]
     #[cfg(not(feature = "testing"))]
     pub unsafe extern "C" fn new_vm(_ptr: *const u64) -> Self {
-        // with opt-level z this can generate different code
-        // putting self in rcx (input arg) rather than rax
         Self {
             pc: core::ptr::null(),
             sp: core::ptr::null_mut(),
@@ -230,7 +228,6 @@ impl Machine {
         unsafe {
             core::ptr::copy(buffer.as_ptr(), m.vmenter.as_mut_ptr(), buffer.len());
         };
-
 
         Ok(m)
     }

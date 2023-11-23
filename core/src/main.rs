@@ -22,14 +22,17 @@ fn main() {
    let args = Args::parse();
    assert!(!args.functions.is_empty());
 
+   if let Err(error) = run_guardian(args) {
+      eprintln!("{}", error.to_string());
+   }
+}
+
+fn run_guardian(args: Args) -> anyhow::Result<()> {
    let mut obfuscator = Obfuscator::new(
       args.r#in,
       args.out
-   ).unwrap().with_map_file(args.map_file);
-   obfuscator.add_functions( args.functions).unwrap();
+   )?.with_map_file(args.map_file);
+   obfuscator.add_functions( args.functions)?;
 
-   obfuscator.virtualize().unwrap();
+   obfuscator.virtualize()
 }
-// virtualization of code that is in between a call of function like begin_virtualization and end_virtualization
-// which are imported from a stub dll, the code is virtualized, a machine is created from the virtual code and the
-// original code segment is replaced by the vmentry of the machine
