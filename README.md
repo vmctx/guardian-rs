@@ -25,7 +25,7 @@ The project is organized into three main components:
 
 2. **VM (Virtual Machine)**: The VM crate is the core of the virtualization process. It interprets and executes the obfuscated x86-64 code within a controlled environment, providing isolation and security. This component ensures that the virtualized code runs smoothly and securely.
 
-3. **VM-Build**: This crate simply the compilation of the virtual machine.
+3. **VM-Build**: This crate is used to compile and test the virtual machine.
 
 ### Rust Implementation
 
