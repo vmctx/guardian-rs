@@ -25,13 +25,9 @@ The project is organized into three main components:
 
 1. **Obfuscator**: The obfuscator is responsible for lifting x86-64 instructions and integrating the VM. It employs various techniques to obscure the code and enhance the overall security of the virtualized environment. Additionally, the obfuscator patches targeted functions with a redirect to the VM entry, ensuring seamless execution.
 
-2. **VM (Virtual Machine)**: The VM crate is the core of the virtualization process. It interprets and executes the obfuscated x86-64 code within a controlled environment, providing isolation and security. This component ensures that the virtualized code runs smoothly and securely.
+2. **VM (Virtual Machine)**: The VM crate is the core of the virtualization process. It interprets and executes the virtualized x86-64 code.
 
 3. **VM-Build**: This crate is used to compile and test the virtual machine.
-
-### Rust Implementation
-
-The entire project is implemented in Rust, a systems programming language known for its performance, reliability, and memory safety. Rust's ownership model and modern language features contribute to the development of a robust and secure virtualization tool.
 
 ## Getting Started
 
