@@ -9,22 +9,17 @@ path = "src/lib.rs"
 doctest = false
 
 [dependencies]
-#clap = "4.3.19"
-# virtualizer
-anyhow = { workspace = true, default-features = true }
 num_enum.workspace = true
 memoffset.workspace = true
-x86.workspace = true
 iced-x86.workspace = true
-#
+symbolic-common = "12.7.0"
+symbolic-demangle = "12.7.0"
+include-crypt = "0.1.1"
+anyhow = "1.0.75"
+exe = "0.5.6"
+# cli
 clap = "4.4.8"
 clap_derive = "4.4.7"
-#
-exe = "0.5.6"
-dynasm = "2.0.0"
-symbolic-common = "12.4.1"
-symbolic-demangle = "12.4.1"
-include-crypt = "0.1.1"
 
 [dev-dependencies]
 test-binary = "3.0.1"

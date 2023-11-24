@@ -34,22 +34,21 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
 #[cfg(not(feature = "testing"))]
 mod crt;
 mod handlers;
-
-const VM_STACK_SIZE: usize = 0x1000;
-const CPU_STACK_SIZE: usize = 0x4000;
-
 #[cfg(not(feature = "testing"))]
 mod vm;
+#[allow(non_camel_case_types)]
 mod syscalls;
+mod allocator;
+mod shared;
+mod macros;
 #[allow(dead_code)]
 pub mod assembler;
 
 #[global_allocator]
 static ALLOCATOR: allocator::Allocator = allocator::Allocator;
 
-mod allocator;
-mod shared;
-mod macros;
+const VM_STACK_SIZE: usize = 0x1000;
+const CPU_STACK_SIZE: usize = 0x4000;
 
 #[repr(C, align(16))]
 pub struct Machine {
@@ -62,9 +61,9 @@ pub struct Machine {
     #[cfg(not(feature = "testing"))]
     cpustack: *mut u8,
     #[cfg(feature = "testing")]
-    cpustack: alloc::vec::Vec<u8>,
+    cpustack: Vec<u8>,
     #[cfg(feature = "testing")]
-    pub vmenter: region::Allocation,
+    pub vmenter: *mut u8,
 }
 
 // alignment check
@@ -85,15 +84,15 @@ impl Machine {
         }
     }
 
+    /// Used to setup VM and generate VM Entry for tests
     #[cfg(feature = "testing")]
-    #[allow(clippy::fn_to_numeric_cast)]
-    pub fn new(program: *const u8) -> anyhow::Result<Self> {
+    pub fn new(program: *const u8) -> Self {
         use alloc::vec;
         use core::mem::forget;
 
         let mut vmstack = vec![0u64; VM_STACK_SIZE];
 
-        let mut m = Self {
+        let mut machine = Self {
             pc: core::ptr::null(),
             sp: core::ptr::null_mut(),
             regs: [0; 16],
@@ -101,9 +100,15 @@ impl Machine {
             rflags: 0,
             vmstack: vmstack.as_mut_ptr(),
             cpustack: vec![0u8; CPU_STACK_SIZE],
-            vmenter: region::alloc(region::page::size(), region::Protection::READ_WRITE_EXECUTE)?,
+            vmenter: unsafe {
+                allocator::allocate(
+                    Layout::new::<[u8; 0x1000]>(),
+                    Protection::ReadWriteExecute,
+                )
+            },
         };
 
+        // deallocation is handled manually
         forget(vmstack);
 
         // Generate VMENTER.
@@ -129,7 +134,7 @@ impl Machine {
         let mut buffer = Vec::new();
         let mut a = Asm::new(&mut buffer);
 
-        a.mov(rax, Imm64::from(&mut m as *mut _ as u64));
+        a.mov(rax, Imm64::from(&mut machine as *mut _ as u64));
 
         // Store the GPRs
         for (reg, regid) in regmap.iter() {
@@ -144,9 +149,9 @@ impl Machine {
 
         // Switch to the VM's CPU stack.
         let vm_rsp = unsafe {
-            m.cpustack
+            machine.cpustack
                 .as_ptr()
-                .add(m.cpustack.len() - 0x100 - (size_of::<u64>() * 2)) as u64
+                .add(machine.cpustack.len() - 0x100 - (size_of::<u64>() * 2)) as u64
         };
         assert_eq!(vm_rsp % 16, 0);
         a.mov(rsp, Imm64::from(vm_rsp));
@@ -202,7 +207,7 @@ impl Machine {
             (&rcx, Register::Rcx.into()),
         ];
 
-        a.mov(rcx, Imm64::from(&mut m as *mut _ as u64));
+        a.mov(rcx, Imm64::from(&mut machine as *mut _ as u64));
 
         // restore rflags
         a.mov(rax, MemOp::IndirectDisp(rcx, memoffset::offset_of!(Machine, rflags) as i32));
@@ -226,14 +231,12 @@ impl Machine {
         a.ret();
 
         unsafe {
-            core::ptr::copy(buffer.as_ptr(), m.vmenter.as_mut_ptr(), buffer.len());
+            core::ptr::copy(buffer.as_ptr(), machine.vmenter, buffer.len());
         };
 
-        Ok(m)
+        machine
     }
 
-    // write unaligned because it expects 8 byte alignment
-    // this stack is always 16 bit aligned
     #[inline(never)]
     unsafe fn stack_push<T: Sized>(&mut self, value: T) {
         assert_eq!(size_of::<T>() * 8 % 16, 0);
@@ -243,8 +246,6 @@ impl Machine {
         self.sp.cast::<T>().write_unaligned(value);
     }
 
-    // write unaligned because it expects 8 byte alignment
-    // this stack is always 16 bit aligned
     #[inline(never)]
     unsafe fn stack_pop<T: Sized>(&mut self) -> T {
         assert_eq!(size_of::<T>() * 8 % 16, 0);
@@ -272,9 +273,7 @@ impl Machine {
             let op = Opcode::try_from(*self.pc).unwrap();
             let op_size = OpSize::try_from(self.pc.add(1).read_unaligned())
                 .unwrap();
-            // increase program counter by one byte
-            // for const, this will load the address
-            // this is now at op size
+            // skip opcode and op size
             self.pc = self.pc.add(2);
 
             match op {
@@ -361,12 +360,9 @@ impl Machine {
 
     #[no_mangle]
     #[cfg(not(feature = "testing"))]
-    pub extern "C" fn dealloc(&mut self) {
-        #[cfg(not(feature = "testing"))]
-        unsafe { dealloc(self.vmstack.cast(), Layout::new::<[u64; VM_STACK_SIZE]>()) }
-        // for some reason using self after first dealloc here does not work
-        #[cfg(not(feature = "testing"))]
-        unsafe { dealloc(self.cpustack, Layout::new::<[u8; CPU_STACK_SIZE]>()) }
+    pub unsafe extern "C" fn dealloc(&mut self) {
+        dealloc(self.vmstack.cast(), Layout::new::<[u64; VM_STACK_SIZE]>());
+        dealloc(self.cpustack, Layout::new::<[u8; CPU_STACK_SIZE]>());
     }
 
     #[inline(always)]
@@ -517,5 +513,3 @@ impl Drop for Machine {
         unsafe { dealloc(self.vmstack as _, Layout::new::<[u64; VM_STACK_SIZE]>()) }
     }
 }
-
-

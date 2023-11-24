@@ -14,8 +14,8 @@ mod tests {
         a.ret().unwrap();
 
         let bytecode = virtualize(&a.assemble(0).unwrap()).unwrap();
-        let m = Machine::new(bytecode.as_ptr()).unwrap();
-        let f: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        let m = Machine::new(bytecode.as_ptr());
+        let f: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(m.vmenter) };
         assert_eq!(f(69), 0);
     }
 
@@ -29,8 +29,8 @@ mod tests {
         a.ret().unwrap();
 
         let bytecode = virtualize(&a.assemble(0).unwrap()).unwrap();
-        let m = Machine::new(bytecode.as_ptr()).unwrap();
-        let f: extern "C" fn(u64) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        let m = Machine::new(bytecode.as_ptr());
+        let f: extern "C" fn(u64) -> i32 = unsafe { std::mem::transmute(m.vmenter) };
         assert_eq!(f(test as *const u64 as u64), 0xDEAD);
     }
 
@@ -43,8 +43,8 @@ mod tests {
         a.ret().unwrap();
 
         let bytecode = virtualize(&a.assemble(0).unwrap()).unwrap();
-        let m = Machine::new(bytecode.as_ptr()).unwrap();
-        let f: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        let m = Machine::new(bytecode.as_ptr());
+        let f: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(m.vmenter) };
         assert_eq!(f(0x1111222233334444), 0x44);
     }
 
@@ -62,8 +62,8 @@ mod tests {
         a.ret().unwrap();
 
         let bytecode = virtualize(&a.assemble(0).unwrap()).unwrap();
-        let m = Machine::new(bytecode.as_ptr()).unwrap();
-        let f: extern "C" fn(&mut u128)  = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        let m = Machine::new(bytecode.as_ptr());
+        let f: extern "C" fn(&mut u128)  = unsafe { std::mem::transmute(m.vmenter) };
         assert_eq!(f(&mut test), ());
         assert_eq!(test, u128::MAX);
     }
@@ -78,8 +78,8 @@ mod tests {
         a.ret().unwrap();
 
         let bytecode = virtualize(&a.assemble(0).unwrap()).unwrap();
-        let m = Machine::new(bytecode.as_ptr()).unwrap();
-        let f: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        let m = Machine::new(bytecode.as_ptr());
+        let f: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(m.vmenter) };
         assert_eq!(f(1), 2);
 
         let mut a = CodeAssembler::new(64).unwrap();
@@ -88,8 +88,8 @@ mod tests {
         a.ret().unwrap();
 
         let bytecode = virtualize(&a.assemble(0).unwrap()).unwrap();
-        let m = Machine::new(bytecode.as_ptr()).unwrap();
-        let f: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        let m = Machine::new(bytecode.as_ptr());
+        let f: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(m.vmenter) };
         assert_eq!(f(1), 0);
     }
 
@@ -103,8 +103,8 @@ mod tests {
         a.ret().unwrap();
 
         let bytecode = virtualize(&a.assemble(0).unwrap()).unwrap();
-        let m = Machine::new(bytecode.as_ptr()).unwrap();
-        let f: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        let m = Machine::new(bytecode.as_ptr());
+        let f: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(m.vmenter) };
         assert_eq!(f(0x1111222233334444), 0x1111222233337777);
     }
 
@@ -120,8 +120,8 @@ mod tests {
         a.ret().unwrap();
 
         let bytecode = virtualize(&a.assemble(0).unwrap()).unwrap();
-        let m = Machine::new(bytecode.as_ptr()).unwrap();
-        let f: extern "C" fn(&mut i32) -> i64 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        let m = Machine::new(bytecode.as_ptr());
+        let f: extern "C" fn(&mut i32) -> i64 = unsafe { std::mem::transmute(m.vmenter) };
         assert_eq!(f(&mut test), 19);
         assert_eq!(test, 68);
     }
@@ -139,8 +139,8 @@ mod tests {
         a.ret().unwrap();
 
         let bytecode = virtualize(&a.assemble(0).unwrap()).unwrap();
-        let m = Machine::new(bytecode.as_ptr()).unwrap();
-        let f: extern "C" fn() -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        let m = Machine::new(bytecode.as_ptr());
+        let f: extern "C" fn() -> i32 = unsafe { std::mem::transmute(m.vmenter) };
         assert_eq!(f(), 0x11112200);
 
         let mut a = CodeAssembler::new(64).unwrap();
@@ -150,8 +150,8 @@ mod tests {
         a.ret().unwrap();
 
         let bytecode = virtualize(&a.assemble(0).unwrap()).unwrap();
-        let m = Machine::new(bytecode.as_ptr()).unwrap();
-        let f: extern "C" fn() -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        let m = Machine::new(bytecode.as_ptr());
+        let f: extern "C" fn() -> i32 = unsafe { std::mem::transmute(m.vmenter) };
         assert_eq!(f(), 0x11110022);
     }
 
@@ -162,8 +162,8 @@ mod tests {
             0x89, 0x4c, 0x24, 0x08, 0x8b, 0x44, 0x24, 0x08, 0x0f, 0xaf, 0x44, 0x24, 0x08, 0xc3
         ];
         let bytecode = virtualize(&SHELLCODE).unwrap();
-        let m = Machine::new(bytecode.as_ptr()).unwrap();
-        let f: extern "C" fn(i32) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        let m = Machine::new(bytecode.as_ptr());
+        let f: extern "C" fn(i32) -> i32 = unsafe { std::mem::transmute(m.vmenter) };
         assert_eq!(f(2), 4);
     }
 
@@ -182,8 +182,8 @@ mod tests {
         a.ret().unwrap(); // return value of rax, should be zero
 
         let bytecode = virtualize(&a.assemble(0).unwrap()).unwrap();
-        let m = Machine::new(bytecode.as_ptr()).unwrap();
-        let f: extern "C" fn(i64, i64) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        let m = Machine::new(bytecode.as_ptr());
+        let f: extern "C" fn(i64, i64) -> i32 = unsafe { std::mem::transmute(m.vmenter) };
         assert_eq!(f(21, 0), 0);
         assert_eq!(f(-2, 0), -3);
     }
@@ -213,8 +213,8 @@ mod tests {
         a.ret().unwrap();
 
         let bytecode = virtualize(&a.assemble(0).unwrap()).unwrap();
-        let m = Machine::new(bytecode.as_ptr()).unwrap();
-        let f: extern "C" fn(i32, i32) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        let m = Machine::new(bytecode.as_ptr());
+        let f: extern "C" fn(i32, i32) -> i32 = unsafe { std::mem::transmute(m.vmenter) };
         let (a, b) = (-7, 5);
         let result = f(a, b);
         assert_eq!(result, -18);
@@ -236,8 +236,8 @@ mod tests {
         a.ret().unwrap();
 
         let bytecode = virtualize(&a.assemble(0).unwrap()).unwrap();
-        let m = Machine::new(bytecode.as_ptr()).unwrap();
-        let f: extern "C" fn(&mut u32) -> u32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        let m = Machine::new(bytecode.as_ptr());
+        let f: extern "C" fn(&mut u32) -> u32 = unsafe { std::mem::transmute(m.vmenter) };
         assert_eq!(f(&mut remainder), 1);
         assert_eq!(remainder, 2);
 
@@ -252,8 +252,8 @@ mod tests {
         a.ret().unwrap();
 
         let bytecode = virtualize(&a.assemble(0).unwrap()).unwrap();
-        let m = Machine::new(bytecode.as_ptr()).unwrap();
-        let f: extern "C" fn(&mut i32) -> i32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        let m = Machine::new(bytecode.as_ptr());
+        let f: extern "C" fn(&mut i32) -> i32 = unsafe { std::mem::transmute(m.vmenter) };
         assert_eq!(f(&mut remainder), -3);
         assert_eq!(remainder, 0);
     }
@@ -271,8 +271,8 @@ mod tests {
         a.ret().unwrap();
 
         let bytecode = virtualize(&a.assemble(0).unwrap()).unwrap();
-        let m = Machine::new(bytecode.as_ptr()).unwrap();
-        let f: extern "C" fn(u32, &mut u32) -> u32 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        let m = Machine::new(bytecode.as_ptr());
+        let f: extern "C" fn(u32, &mut u32) -> u32 = unsafe { std::mem::transmute(m.vmenter) };
         assert_eq!(f(0xFFFFFFFFu32, &mut higher_bits), 0xfffffffd);
         assert_eq!(higher_bits, 0x2);
 
@@ -282,8 +282,8 @@ mod tests {
         a.ret().unwrap();
 
         let bytecode = virtualize(&a.assemble(0).unwrap()).unwrap();
-        let m = Machine::new(bytecode.as_ptr()).unwrap();
-        let f: extern "C" fn(i64, i64) -> i64 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        let m = Machine::new(bytecode.as_ptr());
+        let f: extern "C" fn(i64, i64) -> i64 = unsafe { std::mem::transmute(m.vmenter) };
         assert_eq!(f(-5, 2), -10);
 
         let mut a = CodeAssembler::new(64).unwrap();
@@ -291,8 +291,8 @@ mod tests {
         a.ret().unwrap();
 
         let bytecode = virtualize(&a.assemble(0).unwrap()).unwrap();
-        let m = Machine::new(bytecode.as_ptr()).unwrap();
-        let f: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        let m = Machine::new(bytecode.as_ptr());
+        let f: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(m.vmenter) };
         assert_eq!(f(-5), -20);
     }
 
@@ -307,8 +307,8 @@ mod tests {
         a.add(rax, rcx).unwrap();
         a.ret().unwrap();
         let bytecode = virtualize(&a.assemble(0).unwrap()).unwrap();
-        let m = Machine::new(bytecode.as_ptr()).unwrap();
-        let f: extern "C" fn(i32) -> i8 = unsafe { std::mem::transmute(m.vmenter.as_ptr::<()>()) };
+        let m = Machine::new(bytecode.as_ptr());
+        let f: extern "C" fn(i32) -> i8 = unsafe { std::mem::transmute(m.vmenter) };
         assert_eq!(f(-8), 61);
     }
 }

@@ -1,6 +1,12 @@
 use core::arch::global_asm;
-use winapi::shared::basetsd::{PSIZE_T, ULONG_PTR};
-use winapi::shared::ntdef::{HANDLE, NTSTATUS, PVOID, ULONG};
+use core::ffi::c_void;
+
+type ULONG = u32;
+type NTSTATUS = i32;
+type PVOID = *mut c_void;
+type HANDLE = PVOID;
+type PSIZE_T = *mut ULONG_PTR;
+type ULONG_PTR = usize;
 
 // https://j00ru.vexillium.org/syscalls/nt/64/
 extern "C" {

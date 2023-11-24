@@ -12,18 +12,14 @@ doctest = false
 path = "src/lib.rs"
 
 [dependencies]
-paste = "1.0.14"
+num-traits = { version = "0.2.17", default-features = false }
 static_assertions = "1.1.0"
-num_enum.workspace = true
-num-traits.workspace = true
-memoffset.workspace = true
-x86.workspace = true
-winapi = { version = "0.3.9", default-features = false, features = ["ntdef", "basetsd", "winnt"] }
 hashbrown = "0.14.1"
-# only testing
-anyhow = { workspace = true, optional = true }
-region = { version = "3.0.0", optional = true }
+paste = "1.0.14"
+x86 = "0.52.0"
+num_enum.workspace = true
+memoffset.workspace = true
 
 [features]
 default = []
-testing = ["region", "anyhow"]
+testing = []
