@@ -115,5 +115,3 @@ for the awesome help and repo this project is based on ^-^
 ## License
 
 This project is licensed under the [MIT License](LICENSE), allowing for both personal and commercial use.
-
-Feel free to explore, experiment, and contribute to make the x86-64 Code Virtualizer a cutting-edge tool for code virtualization in the Rust ecosystem.
