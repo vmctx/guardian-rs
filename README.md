@@ -1,3 +1,5 @@
+[![Rust](https://github.com/felix-rs/guardian-rs/actions/workflows/test_vm.yml/badge.svg)](https://github.com/felix-rs/guardian-rs/actions/workflows/test_vm.yml)
+
 # guardian-rs
 This is my x86-64 code virtualizer I decided to open-source, although work will continue mostly on a private version, im open to [contributions and questions](#contributing)!
 
