@@ -5,6 +5,7 @@ fn main() {
     let path = env::var("CARGO_MANIFEST_DIR").unwrap().replace(
         "\\core", "\\vm-build",
     );
+    panic!("{:?}", env::vars());
     let status = Command::new("cargo").env_clear()
         .env("Path", env::var("Path").unwrap())
         .env("TMP", env::var("TMP").unwrap())
