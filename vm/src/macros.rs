@@ -129,13 +129,13 @@ macro_rules! binary_op_save_flags {
 
 pub(crate) use binary_op_save_flags;
 
-macro_rules! binary_op_arg1_save_flags {
+macro_rules! binary_op_arg1 {
     ($self:ident, $op_size:ident, $op:ident) => {{
        match $op_size {
-            OpSize::Qword => binary_op_arg1_save_flags!($self, u64, $op;),
-            OpSize::Dword => binary_op_arg1_save_flags!($self, u32, $op;),
-            OpSize::Word => binary_op_arg1_save_flags!($self, u16, $op;),
-            OpSize::Byte => binary_op_arg1_save_flags!($self, u8, $op;),
+            OpSize::Qword => binary_op_arg1!($self, u64, $op;),
+            OpSize::Dword => binary_op_arg1!($self, u32, $op;),
+            OpSize::Word => binary_op_arg1!($self, u16, $op;),
+            OpSize::Byte => binary_op_arg1!($self, u8, $op;),
         }
     }};
     ($self:ident, $bit:ident, $op:ident;) => {{
@@ -146,8 +146,6 @@ macro_rules! binary_op_arg1_save_flags {
         };
         let result = op1.$op();
 
-        $self.set_rflags();
-
          if core::mem::size_of::<$bit>() == 1 {
             unsafe { $self.stack_push(result as u16); }
         } else {
@@ -156,7 +154,7 @@ macro_rules! binary_op_arg1_save_flags {
     }}
 }
 
-pub(crate) use binary_op_arg1_save_flags;
+pub(crate) use binary_op_arg1;
 
 macro_rules! rotate {
     ($self:ident, $bit:ident, $op:ident) => {{

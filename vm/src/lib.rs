@@ -1,5 +1,4 @@
 #![cfg_attr(not(feature = "testing"), feature(asm_const))]
-
 #![no_std]
 #![cfg_attr(not(feature = "testing"), no_main)]
 
@@ -18,12 +17,12 @@ use memoffset::offset_of;
 use x86::bits64::rflags::RFlags;
 
 use crate::allocator::{allocate, Protection};
-use crate::assembler::{Asm, Imm64, Reg64, RegXmm};
 use crate::assembler::prelude::*;
 use crate::assembler::Reg64::*;
 use crate::assembler::RegXmm::*;
-use crate::shared::*;
+use crate::assembler::{Asm, Imm64, Reg64, RegXmm};
 use crate::macros::*;
+use crate::shared::*;
 
 #[cfg(not(feature = "testing"))]
 #[panic_handler]
@@ -31,18 +30,18 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
     loop {}
 }
 
+mod allocator;
+#[allow(dead_code)]
+pub mod assembler;
 #[cfg(not(feature = "testing"))]
 mod crt;
 mod handlers;
-#[cfg(not(feature = "testing"))]
-mod vm;
+mod macros;
+mod shared;
 #[allow(non_camel_case_types)]
 mod syscalls;
-mod allocator;
-mod shared;
-mod macros;
-#[allow(dead_code)]
-pub mod assembler;
+#[cfg(not(feature = "testing"))]
+mod vm;
 
 #[global_allocator]
 static ALLOCATOR: allocator::Allocator = allocator::Allocator;
@@ -103,10 +102,7 @@ impl Machine {
             vmstack: vmstack.as_mut_ptr(),
             cpustack: vec![0u8; CPU_STACK_SIZE],
             vmenter: unsafe {
-                allocate(
-                    Layout::new::<[u8; 0x1000]>(),
-                    Protection::ReadWriteExecute,
-                )
+                allocate(Layout::new::<[u8; 0x1000]>(), Protection::ReadWriteExecute)
             },
         };
 
@@ -181,7 +177,8 @@ impl Machine {
 
         for (reg, regid) in xmm_regmap.iter() {
             let offset = memoffset::offset_of!(Machine, fxsave)
-                + memoffset::offset_of!(XSaveMin, xmm_registers) + *regid as usize * 16;
+                + memoffset::offset_of!(XSaveMin, xmm_registers)
+                + *regid as usize * 16;
             a.movaps(MemOp::IndirectDisp(rcx, offset as i32), **reg);
         }
 
@@ -220,7 +217,8 @@ impl Machine {
 
         for (reg, regid) in xmm_regmap.iter() {
             let offset = memoffset::offset_of!(Machine, fxsave)
-                + memoffset::offset_of!(XSaveMin, xmm_registers) + *regid as usize * 16;
+                + memoffset::offset_of!(XSaveMin, xmm_registers)
+                + *regid as usize * 16;
             a.movaps(**reg, MemOp::IndirectDisp(rcx, offset as i32));
         }
 
@@ -266,15 +264,12 @@ impl Machine {
         assert_eq!(self.sp as u64 % 16, 0);
 
         let mut instructions = Vec::from_raw_parts(
-            allocate(
-                Layout::new::<[u8; 0x1000]>(), Protection::ReadWriteExecute,
-            ), 0, 0x1000,
+            allocate(Layout::new::<[u8; 0x1000]>(), Protection::ReadWriteExecute), 0, 0x1000,
         );
 
         loop {
             let op = Opcode::try_from(*self.pc).unwrap();
-            let op_size = OpSize::try_from(self.pc.add(1).read_unaligned())
-                .unwrap();
+            let op_size = OpSize::try_from(self.pc.add(1).read_unaligned()).unwrap();
             // skip opcode and op size
             self.pc = self.pc.add(2);
 
@@ -356,7 +351,7 @@ impl Machine {
 
                     self.pc = self.pc.add(instr_size);
                 }
-                Opcode::VmExit => break
+                Opcode::VmExit => break,
             }
         }
 
@@ -377,20 +372,15 @@ impl Machine {
 }
 
 #[inline(never)]
-pub fn reloc_instr(vm: &mut Machine, instr_ptr: *const u8, instr_size: usize, instr_buffer: &mut Vec<u8>) {
+pub fn reloc_instr(
+    vm: &mut Machine,
+    instr_ptr: *const u8,
+    instr_size: usize,
+    instr_buffer: &mut Vec<u8>
+) {
     let mut non_vol_regs: [u64; 9] = [0, 0, 0, 0, 0, 0, 0, 0, 0];
 
-    let non_vol_regmap: &[&Reg64] = &[
-        &rbx,
-        &rsp,
-        &rbp,
-        &rsi,
-        &rdi,
-        &r12,
-        &r13,
-        &r14,
-        &r15,
-    ];
+    let non_vol_regmap: &[&Reg64] = &[&rbx, &rsp, &rbp, &rsi, &rdi, &r12, &r13, &r14, &r15];
 
     let regmap: &[(&Reg64, u8)] = &[
         (&rax, Register::Rax.into()),
@@ -434,7 +424,8 @@ pub fn reloc_instr(vm: &mut Machine, instr_ptr: *const u8, instr_size: usize, in
 
     for (reg, regid) in xmm_regmap.iter() {
         let offset = memoffset::offset_of!(Machine, fxsave)
-            + memoffset::offset_of!(XSaveMin, xmm_registers) + *regid as usize * 16;
+            + memoffset::offset_of!(XSaveMin, xmm_registers)
+            + *regid as usize * 16;
         asm.movaps(**reg, assembler::MemOp::IndirectDisp(rcx, offset as i32));
     }
 
@@ -477,7 +468,8 @@ pub fn reloc_instr(vm: &mut Machine, instr_ptr: *const u8, instr_size: usize, in
 
     for (reg, regid) in xmm_regmap.iter() {
         let offset = memoffset::offset_of!(Machine, fxsave)
-            + memoffset::offset_of!(XSaveMin, xmm_registers) + *regid as usize * 16;
+            + memoffset::offset_of!(XSaveMin, xmm_registers)
+            + *regid as usize * 16;
         asm.movaps(MemOp::IndirectDisp(rax, offset as i32), **reg);
     }
 
@@ -507,7 +499,9 @@ pub fn reloc_instr(vm: &mut Machine, instr_ptr: *const u8, instr_size: usize, in
     }
     asm.ret();
 
-    let func = unsafe { core::mem::transmute::<_, extern "C" fn(*mut Machine, *mut u64)>(instr_buffer.as_mut_ptr()) };
+    let func = unsafe {
+        core::mem::transmute::<_, extern "C" fn(*mut Machine, *mut u64)>(instr_buffer.as_mut_ptr())
+    };
     // use non_vol_regs here so no use after free just in case
     func(vm, non_vol_regs.as_mut_ptr());
 }
