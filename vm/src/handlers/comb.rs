@@ -1,4 +1,3 @@
-use core::mem::size_of;
 use crate::{Machine, OpSize};
 
 macro_rules! impl_set_bytes {
@@ -15,7 +14,7 @@ macro_rules! impl_set_bytes {
             }
 
             fn set_high(&mut self, value: $from) {
-                *self |= (value as $to) << size_of::<$from>() * 8;
+                *self |= (value as $to) << $from::BITS as usize;
             }
         }
     }};

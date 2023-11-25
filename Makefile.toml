@@ -5,19 +5,17 @@ RELEASE_PATH = "target/x86_64-pc-windows-msvc/release"
 [config]
 default_to_workspace = false
 
+[tasks.build]
+dependencies = ["vm"]
+
 [tasks.vm]
 script = [
     "cd vm-build",
     "%HOMEDRIVE%/%HOMEPATH%/.cargo/bin/cargo.exe +nightly b --release --target x86_64-pc-windows-msvc",
 ]
 
-[tasks.vmx32]
-script = [
-    "cd vm-build",
-    "%HOMEDRIVE%/%HOMEPATH%/.cargo/bin/cargo.exe +nightly b --release --target i686-pc-windows-msvc",
-]
-
 [tasks.test]
+dependencies = ["vm"]
 toolchain = "nightly"
 command = "cargo"
 # args = ["test", "--all-features"]
