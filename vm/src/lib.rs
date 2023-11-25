@@ -17,7 +17,7 @@ use core::slice;
 use memoffset::offset_of;
 use x86::bits64::rflags::RFlags;
 
-use crate::allocator::Protection;
+use crate::allocator::{allocate, Protection};
 use crate::assembler::{Asm, Imm64, Reg64, RegXmm};
 use crate::assembler::prelude::*;
 use crate::assembler::Reg64::*;
@@ -70,17 +70,19 @@ pub struct Machine {
 static_assertions::const_assert_eq!(core::mem::size_of::<Machine>() % 16, 0);
 
 impl Machine {
+    // see shared -> XSaveMin
+    #[allow(improper_ctypes_definitions)]
     #[no_mangle]
     #[cfg(not(feature = "testing"))]
-    pub unsafe extern "C" fn new_vm(_ptr: *const u64) -> Self {
+    unsafe extern "C" fn alloc_vm(_ptr: *const u64) -> Self {
         Self {
             pc: core::ptr::null(),
             sp: core::ptr::null_mut(),
             regs: [0; 16],
             fxsave: core::mem::zeroed::<XSaveMin>(),
             rflags: 0,
-            vmstack: allocator::allocate(Layout::new::<[u64; VM_STACK_SIZE]>(), Protection::ReadWrite).cast(),
-            cpustack: allocator::allocate(Layout::new::<[u8; CPU_STACK_SIZE]>(), Protection::ReadWrite),
+            vmstack: allocate(Layout::new::<[u64; VM_STACK_SIZE]>(), Protection::ReadWrite).cast(),
+            cpustack: allocate(Layout::new::<[u8; CPU_STACK_SIZE]>(), Protection::ReadWrite),
         }
     }
 
@@ -101,7 +103,7 @@ impl Machine {
             vmstack: vmstack.as_mut_ptr(),
             cpustack: vec![0u8; CPU_STACK_SIZE],
             vmenter: unsafe {
-                allocator::allocate(
+                allocate(
                     Layout::new::<[u8; 0x1000]>(),
                     Protection::ReadWriteExecute,
                 )
@@ -264,7 +266,7 @@ impl Machine {
         assert_eq!(self.sp as u64 % 16, 0);
 
         let mut instructions = Vec::from_raw_parts(
-            allocator::allocate(
+            allocate(
                 Layout::new::<[u8; 0x1000]>(), Protection::ReadWriteExecute,
             ), 0, 0x1000,
         );
@@ -310,9 +312,12 @@ impl Machine {
                         JmpCond::Ja => !rflags.contains(RFlags::FLAGS_ZF)
                             && !rflags.contains(RFlags::FLAGS_CF),
                         JmpCond::Jae => !rflags.contains(RFlags::FLAGS_CF),
-                        JmpCond::Jle => rflags.contains(RFlags::FLAGS_SF).bitxor(rflags.contains(RFlags::FLAGS_OF))
+                        JmpCond::Jle => rflags.contains(RFlags::FLAGS_SF)
+                            .bitxor(rflags.contains(RFlags::FLAGS_OF))
                             || rflags.contains(RFlags::FLAGS_ZF),
-                        JmpCond::Jg => rflags.contains(RFlags::FLAGS_SF) == rflags.contains(RFlags::FLAGS_OF) && !rflags.contains(RFlags::FLAGS_ZF)
+                        JmpCond::Jg => rflags.contains(RFlags::FLAGS_SF)
+                            == rflags.contains(RFlags::FLAGS_OF)
+                            && !rflags.contains(RFlags::FLAGS_ZF)
                     };
 
                     self.pc = self.pc.add(1); // skip jmpcond

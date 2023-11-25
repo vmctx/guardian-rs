@@ -46,7 +46,6 @@ pop     rbx
 .endmacro
 
 fxsave:
-    // unaligned instr: vmovdqu
     movaps [rcx + {xmm0}], xmm0
     movaps [rcx + {xmm1}], xmm1
     movaps [rcx + {xmm2}], xmm2
@@ -66,7 +65,6 @@ fxsave:
     ret
 
 fxrestore:
-    // unaligned instr: vmovdqu
     movaps xmm0, [rcx + {xmm0}]
     movaps xmm1, [rcx + {xmm1}]
     movaps xmm2, [rcx + {xmm2}]
@@ -92,7 +90,7 @@ vmentry:
     // +8 to 16 byte align stack here
     sub rsp, {sizeof_machine} + 8
     mov rcx, rsp
-    call new_vm
+    call alloc_vm
     add rsp, {sizeof_machine} + 8
     popvol
     jmp vmenter

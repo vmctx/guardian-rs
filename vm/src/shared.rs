@@ -100,6 +100,21 @@ pub enum XmmRegister {
     Xmm15,
 }
 
+impl Register {
+    pub const fn offset(self) -> usize {
+        self as u8 as usize * 8
+    }
+}
+
+impl XmmRegister {
+    pub const fn offset(self) -> usize {
+        self as u8 as usize * 16
+    }
+}
+
+// 128-bit integers don't currently have a known stable ABI
+// dont know if this could cause any problems atm
+// https://github.com/rust-lang/rust/pull/116672
 #[repr(C, align(16))]
 pub struct XSaveMin {
     #[cfg(target_pointer_width = "64")]
