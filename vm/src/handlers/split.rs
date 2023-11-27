@@ -1,5 +1,7 @@
+use vm_proc::handler;
 use crate::{Machine, OpSize};
 
+#[handler]
 pub unsafe fn split(vm: &mut Machine, op_size: OpSize) {
     match op_size {
         OpSize::Qword => {

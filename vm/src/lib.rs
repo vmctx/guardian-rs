@@ -47,7 +47,7 @@ mod vm;
 static ALLOCATOR: allocator::Allocator = allocator::Allocator;
 
 const VM_STACK_SIZE: usize = 0x1000;
-const CPU_STACK_SIZE: usize = 0x4000;
+const CPU_STACK_SIZE: usize = 0x8000;
 
 #[repr(C, align(16))]
 pub struct Machine {
@@ -255,8 +255,27 @@ impl Machine {
         value
     }
 
+    /*
     #[allow(clippy::missing_safety_doc)]
     #[no_mangle]
+    #[cfg(feature = "obfuscation")]
+    pub unsafe extern "C" fn run(&mut self, program: *const u8) -> &mut Self {
+        self.pc = program;
+        self.sp = self.vmstack
+            .add((VM_STACK_SIZE - 0x100 - (size_of::<u64>() * 2)) / size_of::<u64>());
+        assert_eq!(self.sp as u64 % 16, 0);
+        // maybe this will be called with
+        // push first_handler
+        // jmp run
+        // so run returns to the first handler
+        // then make sure rcx is self
+        self
+    }
+     */
+
+    #[allow(clippy::missing_safety_doc)]
+    #[no_mangle]
+    //#[cfg(feature = "testing")]
     pub unsafe extern "C" fn run(&mut self, program: *const u8) -> &mut Self {
         self.pc = program;
         self.sp = self.vmstack
@@ -273,6 +292,10 @@ impl Machine {
             // skip opcode and op size
             self.pc = self.pc.add(2);
 
+            // todo move ALL handlers to functions for threaded code obfuscation
+            // if obfuscation feature is enabled instructions vec ptr should be
+            // stored in struct
+            // vmexit wont be needed to be moved it will just be calling vmexit directly
             match op {
                 Opcode::Const => handlers::r#const::r#const(self, op_size),
                 Opcode::Load => handlers::load::load(self, op_size),

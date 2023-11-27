@@ -1,3 +1,4 @@
+use vm_proc::handler;
 use crate::{Machine, OpSize};
 
 macro_rules! impl_set_bytes {
@@ -25,6 +26,7 @@ impl_set_bytes!(u16, u32);
 impl_set_bytes!(u32, u64);
 impl_set_bytes!(u64, u128);
 
+#[handler]
 pub unsafe fn combine(vm: &mut Machine, op_size: OpSize) {
     match op_size {
         OpSize::Qword => {

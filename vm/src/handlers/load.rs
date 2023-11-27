@@ -1,5 +1,7 @@
+use vm_proc::handler;
 use crate::{Machine, OpSize};
 
+#[handler]
 pub unsafe fn load(vm: &mut Machine, op_size: OpSize) {
     // pop u64 cause its an address, can be usize for 32bit support ig
     // not sure tho a 100%
@@ -13,6 +15,7 @@ pub unsafe fn load(vm: &mut Machine, op_size: OpSize) {
     };
 }
 
+#[handler]
 pub unsafe fn load_xmm(vm: &mut Machine, _op_size: OpSize) {
     let value = vm.stack_pop::<*const u128>().read_unaligned();
     vm.stack_push::<u128>(value)

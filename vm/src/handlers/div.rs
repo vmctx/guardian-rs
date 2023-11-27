@@ -14,7 +14,9 @@ macro_rules! div_save_flags {
 }
 
 use div_save_flags;
+use vm_proc::handler;
 
+#[handler]
 pub fn div(vm: &mut Machine, op_size: OpSize) {
     match op_size {
         OpSize::Qword => div_save_flags!(vm, u64, u128),
@@ -24,6 +26,7 @@ pub fn div(vm: &mut Machine, op_size: OpSize) {
     }
 }
 
+#[handler]
 pub fn idiv(vm: &mut Machine, op_size: OpSize) {
     match op_size {
         OpSize::Qword => div_save_flags!(vm, i64, i128),
@@ -33,6 +36,7 @@ pub fn idiv(vm: &mut Machine, op_size: OpSize) {
     }
 }
 
+#[handler]
 pub fn shr(vm: &mut Machine, op_size: OpSize) {
     binary_op_sized!(vm, op_size, wrapping_div);
 }

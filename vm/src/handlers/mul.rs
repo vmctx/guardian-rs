@@ -12,7 +12,9 @@ macro_rules! mul_save_flags {
 }
 
 use mul_save_flags;
+use vm_proc::handler;
 
+#[handler]
 pub fn mul(vm: &mut Machine, op_size: OpSize) {
     match op_size {
         OpSize::Qword => mul_save_flags!(vm, u128, u64),

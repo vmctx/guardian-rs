@@ -1,5 +1,7 @@
+use vm_proc::handler;
 use crate::{Machine, OpSize};
 
+#[handler]
 pub unsafe fn store(vm: &mut Machine, op_size: OpSize) {
     let register = vm.stack_pop::<*mut u64>();
     // only 64 and 32 bit overwrite full
@@ -11,11 +13,13 @@ pub unsafe fn store(vm: &mut Machine, op_size: OpSize) {
     };
 }
 
+#[handler]
 pub unsafe fn store_xmm(vm: &mut Machine, _op_size: OpSize) {
     let register = vm.stack_pop::<*mut u128>();
     register.write_unaligned(vm.stack_pop::<u128>())
 }
 
+#[handler]
 pub unsafe fn store_reg(vm: &mut Machine, op_size: OpSize) {
     match op_size {
         OpSize::Dword => {
@@ -26,6 +30,7 @@ pub unsafe fn store_reg(vm: &mut Machine, op_size: OpSize) {
     };
 }
 
+#[handler]
 pub unsafe fn store_reg_zx(vm: &mut Machine, op_size: OpSize) {
     let register = vm.stack_pop::<*mut u64>();
     match op_size {

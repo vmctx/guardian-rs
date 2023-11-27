@@ -19,4 +19,4 @@ iced-x86.workspace = true
 
 [features]
 default = []
-testing = []
+testing = ["guardian-vm/testing"]

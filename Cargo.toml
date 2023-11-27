@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "core",
     "vm-build",
+    "vm-proc",
     "vm"
 ]
 

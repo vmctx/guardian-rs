@@ -1,5 +1,7 @@
+use vm_proc::handler;
 use crate::{Machine, OpSize};
 
+#[handler]
 pub unsafe fn r#const(vm: &mut Machine, op_size: OpSize) {
     match op_size {
         OpSize::Qword => vm.stack_push(vm.pc.cast::<u64>().read_unaligned()),
