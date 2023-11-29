@@ -341,7 +341,10 @@ impl Machine {
                     self.pc = self.pc.add(1); // skip jmpcond
 
                     if do_jmp {
-                        self.pc = program.add(self.pc.cast::<usize>().read_unaligned());
+                        // -8 when obfuscated bcuz bytecode offset - 8 = next_handler of
+                        // previous instruction = current handler of target branch
+                        let offset = self.pc.cast::<i64>().read_unaligned();
+                        self.pc = (self.pc.sub(3) as i64).wrapping_sub(offset) as _;
                     } else {
                         self.pc = self.pc.add(size_of::<u64>());
                     }
@@ -399,7 +402,7 @@ pub fn reloc_instr(
     vm: &mut Machine,
     instr_ptr: *const u8,
     instr_size: usize,
-    instr_buffer: &mut Vec<u8>
+    instr_buffer: &mut Vec<u8>,
 ) {
     let mut non_vol_regs: [u64; 9] = [0, 0, 0, 0, 0, 0, 0, 0, 0];
 

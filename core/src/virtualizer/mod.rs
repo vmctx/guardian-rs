@@ -102,7 +102,7 @@ macro_rules! vmasm_sized {(
     )*
 })}
 
-struct Virtualizer {
+pub struct Virtualizer {
     asm: Assembler,
     pe: Option<VecPE>,
     image_base: u64,
@@ -123,6 +123,10 @@ impl Virtualizer {
             image_base: pe.get_image_base()?,
             pe: Some(pe),
         })
+    }
+
+    pub fn reset(&mut self) {
+        self.asm.clear();
     }
 
     pub fn virtualize(&mut self, program: &[u8]) -> anyhow::Result<Vec<u8>> {
@@ -179,7 +183,7 @@ impl Virtualizer {
                         self.asm.jmp(condition, 0);
                         unresolved_jmps += 1;
                     } else if target_map.contains_key(&target) {
-                        self.asm.jmp(condition, *target_map.get(&target).unwrap());
+                        self.asm.jmp(condition, self.asm.len().wrapping_sub(*target_map.get(&target).unwrap() as usize) as u64);
                     } else {
                         unresolved_jmps += 1;
                     }
@@ -204,7 +208,7 @@ impl Virtualizer {
         }
 
         for (jmp_offset, ip) in jmp_map.into_iter() {
-            self.asm.patch(jmp_offset as usize + 3, *target_map.get(&ip).unwrap());
+            self.asm.patch(jmp_offset as usize + 3, jmp_offset.wrapping_sub(*target_map.get(&ip).unwrap()));
             unresolved_jmps -= 1;
         }
 

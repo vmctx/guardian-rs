@@ -1,10 +1,10 @@
 use anyhow::anyhow;
-use exe::{Buffer, Error, ImageSectionHeader, PE, PEType, RVA, SectionCharacteristics, VecPE};
+use exe::{Buffer, Error, ImageDirectoryEntry, ImageSectionHeader, PE, PEType, RVA, SectionCharacteristics, VecPE};
 use iced_x86::code_asm::CodeAssembler;
 use include_crypt::{EncryptedFile, include_crypt};
 
 use crate::pe::parser::MapFile;
-use crate::virtualizer::virtualize_with_ip;
+use crate::virtualizer::Virtualizer;
 
 pub mod virtualizer;
 pub mod pe;
@@ -80,7 +80,15 @@ impl Obfuscator {
 
         let bytecode_section = self.add_section(&bytecode_section, &bytecode).unwrap();
 
-        let vm_file = VecPE::from_disk_data(VM.decrypt().as_slice());
+        let mut vm_file = VecPE::from_disk_data(VM.decrypt().as_slice());
+
+        let export_dir = vm_file.get_data_directory(ImageDirectoryEntry::Export)?;
+        // zero out any info about exports after virtualizing
+        vm_file.write(
+            vm_file.rva_to_offset(export_dir.virtual_address)?.into(),
+            vec![0x00u8; export_dir.size as usize]
+        )?;
+
         let vm_file_text = vm_file.get_section_by_name(".text").unwrap().clone();
         let machine_entry = vm_file.get_entrypoint().unwrap();
 
@@ -111,22 +119,30 @@ impl Obfuscator {
     }
 
     fn virtualize_fns(&mut self) -> anyhow::Result<(Vec<u8>, Vec<VirtualizedRoutine>)> {
+        let mut virtualizer = Virtualizer::with_pe(self.pe.clone())?;
         let mut bytecode = Vec::new();
         let mut virtualized_fns = Vec::new();
 
         for function in &self.functions {
             let target_fn_addr = self.pe.rva_to_offset(function.rva).unwrap().0 as _;
             let target_function = self.pe.get_slice_ref::<u8>(target_fn_addr, function.len).unwrap();
-            let mut virtualized_function = virtualize_with_ip(
-                self.pe.clone(),
+            let mut virtualized_function = virtualizer.virtualize_with_ip(
                 self.pe.get_image_base().unwrap() + function.rva.0 as u64,
                 target_function,
             )?;
+            // todo if obfuscate
+            // removes opcode
+            // inserts first_handler at start
+            // inserts next_handler at end of every virtual instruction
+            // fixes jmp offsets
+            // jmp offsets should preferably be signed anyways so they can be relative
+            // virtualized_function = disassembler::obfuscate(virtualized_function);
             virtualized_fns.push(VirtualizedRoutine {
                 routine: Routine { rva: RVA(function.rva.0 as u32), len: function.len },
                 bytecode_rva: RVA(bytecode.len() as u32),
             });
             bytecode.append(&mut virtualized_function);
+            virtualizer.reset();
         }
 
         Ok((bytecode, virtualized_fns))

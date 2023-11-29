@@ -27,6 +27,10 @@ impl Assembler {
         self.program.clone()
     }
 
+    pub fn clear(&mut self) {
+        self.program.clear()
+    }
+
     pub fn len(&self) -> usize {
         self.program.len()
     }
