@@ -15,14 +15,15 @@ impl Reloc for iced_x86::Instruction {
         let Some(pe) = pe else { return false; };
         let pe_image_base = pe.get_image_base().unwrap();
 
-        let relocation_table = RelocationDirectory::parse(pe).unwrap();
-        let relocations = relocation_table.relocations(pe, pe_image_base)
-            .unwrap();
+        let reloc_table = RelocationDirectory::parse(pe).unwrap();
+        let Ok(relocs) = reloc_table.relocations(pe, pe_image_base) else {
+            return false;
+        };
 
         let instr_rva = (self.ip() - pe_image_base) as u32;
-        relocations.iter().find(|(rva, _)| {
+        relocs.iter().any(|(rva, _)| {
             rva.0 >= instr_rva && rva.0 < instr_rva + self.len() as u32
-        }).is_some()
+        })
     }
 }
 
@@ -72,7 +73,7 @@ impl From<iced_x86::Register> for OpSize {
 impl TryFrom<MemorySize> for OpSize {
     type Error = TryFromPrimitiveError<OpSize>;
 
-    fn try_from(size: MemorySize) -> std::result::Result<Self, Self::Error> {
+    fn try_from(size: MemorySize) -> Result<Self, Self::Error> {
         Self::try_from(size.size() as u8)
     }
 }
@@ -80,7 +81,7 @@ impl TryFrom<MemorySize> for OpSize {
 impl TryFrom<&iced_x86::Instruction> for OpSize {
     type Error = TryFromPrimitiveError<OpSize>;
 
-    fn try_from(inst: &iced_x86::Instruction) -> std::result::Result<Self, Self::Error> {
+    fn try_from(inst: &iced_x86::Instruction) -> Result<Self, Self::Error> {
         if inst.memory_size() != MemorySize::Unknown {
             Self::try_from(inst.memory_size())
         } else if inst.op0_register() != iced_x86::Register::None {
@@ -95,7 +96,7 @@ impl TryFrom<&iced_x86::Instruction> for OpSize {
                 OpKind::Immediate8to64 => OpSize::Qword,
                 OpKind::Immediate32to64 => OpSize::Qword,
                 OpKind::Immediate64 => OpSize::Qword,
-                _ => panic!("invalid immediate?")
+                _ => panic!("unsupported operand")
             };
             Ok(value)
         }
@@ -143,20 +144,14 @@ pub trait HigherLower8Bit {
 
 impl HigherLower8Bit for iced_x86::Register {
     fn is_higher_8_bit(&self) -> bool {
-        match self {
-            Self::AH | Self::BH |
-            Self::CH | Self::DH => true,
-            _ => false,
-        }
+        matches!(self, Self::AH | Self::BH |
+             Self::CH | Self::DH)
     }
 
     fn is_lower_8_bit(&self) -> bool {
-        match self {
-            Self::AL | Self::BL | Self::CL |
+        matches!(self, Self::AL | Self::BL | Self::CL |
             Self::DL | Self::SIL | Self::DIL
-            | Self::SPL | Self::BPL => true,
-            _ => false,
-        }
+            | Self::SPL | Self::BPL)
     }
 }
 
@@ -211,11 +206,6 @@ impl From<iced_x86::Mnemonic> for JmpCond {
 
 impl From<iced_x86::Register> for Register {
     fn from(reg: iced_x86::Register) -> Self {
-        // reg.full_register() and exclude rip?
-        // maybe when i add xmm/ymm/zmm support
-        // probably only support xmm (128 bit) 0-15
-        // will have to see maybe dont allocate struct on stack
-        // but its better to
         match reg {
             iced_x86::Register::RAX => Register::Rax,
             iced_x86::Register::RBX => Register::Rbx,
@@ -292,11 +282,6 @@ impl From<iced_x86::Register> for Register {
 
 impl From<iced_x86::Register> for XmmRegister {
     fn from(reg: iced_x86::Register) -> Self {
-        // reg.full_register() and exclude rip?
-        // maybe when i add xmm/ymm/zmm support
-        // probably only support xmm (128 bit) 0-15
-        // will have to see maybe dont allocate struct on stack
-        // but its better to
         match reg {
             iced_x86::Register::XMM0 => XmmRegister::Xmm0,
             iced_x86::Register::XMM1 => XmmRegister::Xmm1,

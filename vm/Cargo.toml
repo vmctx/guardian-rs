@@ -1,6 +1,6 @@
 [package]
 name = "guardian-vm"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 build = "build.rs"
 
@@ -12,7 +12,6 @@ doctest = false
 path = "src/lib.rs"
 
 [dependencies]
-num-traits = { version = "0.2.17", default-features = false }
 static_assertions = "1.1.0"
 hashbrown = "0.14.1"
 paste = "1.0.14"
@@ -23,5 +22,5 @@ memoffset.workspace = true
 
 [features]
 default = []
-obfuscation = ["vm-proc/enabled"]
+threaded = ["vm-proc/enabled"]
 testing = []

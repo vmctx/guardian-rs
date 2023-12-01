@@ -1,7 +1,8 @@
 use core::arch::global_asm;
 use memoffset::offset_of;
 
-use crate::{CPU_STACK_SIZE, Machine, Register, XmmRegister};
+use crate::{CPU_STACK_OFFSET, Machine, Register, XmmRegister};
+use crate::alloc_new_stack;
 
 global_asm!(include_str!("vm.asm"),
     sizeof_machine = const core::mem::size_of::<Machine>(),
@@ -38,6 +39,14 @@ global_asm!(include_str!("vm.asm"),
     xmm14 = const offset_of!(Machine, fxsave) + XmmRegister::Xmm14.offset(),
     xmm15 = const offset_of!(Machine, fxsave) + XmmRegister::Xmm15.offset(),
     rflags = const offset_of!(Machine, rflags),
+    alloc_vm = sym Machine::alloc_vm,
+    alloc_new_stack = sym alloc_new_stack,
+    dealloc = sym Machine::dealloc,
     cpustack = const offset_of!(Machine, cpustack),
-    cpustack_offset = const CPU_STACK_SIZE - 0x100 - core::mem::size_of::<u64>() * 2
+    cpustack_offset = const CPU_STACK_OFFSET,
 );
+
+#[no_mangle]
+unsafe extern "C" fn vmexit_threaded(vm: *mut Machine) -> *mut Machine {
+    vm
+}

@@ -1,26 +1,34 @@
+// guardian-rs
+// Copyright (C) 2023 felix-rs
+
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see <http://www.gnu.org/licenses/>.
+
 #![cfg_attr(not(feature = "testing"), feature(asm_const))]
-#![no_std]
 #![cfg_attr(not(feature = "testing"), no_main)]
+#![no_std]
+
+#[cfg(all(feature = "threaded", feature = "testing"))]
+compile_error!("\t [!] cannot have testing feature with threaded");
 
 extern crate alloc;
 
 use alloc::alloc::dealloc;
 use alloc::vec::Vec;
 use core::alloc::Layout;
-use core::arch::asm;
-use core::convert::TryFrom;
 use core::mem::size_of;
-use core::ops::BitXor;
-use core::slice;
-
-use memoffset::offset_of;
-use x86::bits64::rflags::RFlags;
 
 use crate::allocator::{allocate, Protection};
-use crate::assembler::prelude::*;
-use crate::assembler::Reg64::*;
-use crate::assembler::RegXmm::*;
-use crate::assembler::{Asm, Imm64, Reg64, RegXmm};
 use crate::macros::*;
 use crate::shared::*;
 
@@ -49,6 +57,8 @@ static ALLOCATOR: allocator::Allocator = allocator::Allocator;
 const VM_STACK_SIZE: usize = 0x1000;
 const CPU_STACK_SIZE: usize = 0x8000;
 
+const CPU_STACK_OFFSET: usize = CPU_STACK_SIZE - 0x100 - size_of::<u64>() * 2;
+
 #[repr(C, align(16))]
 pub struct Machine {
     pc: *const u8,
@@ -61,6 +71,7 @@ pub struct Machine {
     cpustack: *mut u8,
     #[cfg(feature = "testing")]
     cpustack: Vec<u8>,
+    instr_buffer: Vec<u8>,
     #[cfg(feature = "testing")]
     pub vmenter: *mut u8,
 }
@@ -68,26 +79,34 @@ pub struct Machine {
 // alignment check
 static_assertions::const_assert_eq!(core::mem::size_of::<Machine>() % 16, 0);
 
+#[cfg(not(feature = "testing"))]
+unsafe extern "C" fn alloc_new_stack() -> *mut u8 {
+    allocate(Layout::new::<[u8; CPU_STACK_SIZE]>(), Protection::ReadWrite)
+}
+
 impl Machine {
-    // see shared -> XSaveMin
-    #[allow(improper_ctypes_definitions)]
-    #[no_mangle]
     #[cfg(not(feature = "testing"))]
-    unsafe extern "C" fn alloc_vm(_ptr: *const u64) -> Self {
-        Self {
+    unsafe extern "C" fn alloc_vm(ptr: *mut Self) {
+        *ptr = Self {
             pc: core::ptr::null(),
             sp: core::ptr::null_mut(),
             regs: [0; 16],
             fxsave: core::mem::zeroed::<XSaveMin>(),
             rflags: 0,
             vmstack: allocate(Layout::new::<[u64; VM_STACK_SIZE]>(), Protection::ReadWrite).cast(),
-            cpustack: allocate(Layout::new::<[u8; CPU_STACK_SIZE]>(), Protection::ReadWrite),
+            cpustack: core::ptr::null_mut(), // will be written by vmentry
+            instr_buffer: Vec::from_raw_parts(
+                allocate(Layout::new::<[u8; 0x1000]>(), Protection::ReadWriteExecute), 0, 0x1000,
+            ),
         }
     }
 
     /// Used to setup VM and generate VM Entry for tests
     #[cfg(feature = "testing")]
     pub fn new(program: *const u8) -> Self {
+        use crate::assembler::prelude::*;
+        use crate::assembler::Reg64::*;
+        use crate::assembler::RegXmm::*;
         use alloc::vec;
         use core::mem::forget;
 
@@ -101,6 +120,11 @@ impl Machine {
             rflags: 0,
             vmstack: vmstack.as_mut_ptr(),
             cpustack: vec![0u8; CPU_STACK_SIZE],
+            instr_buffer: unsafe {
+                Vec::from_raw_parts(
+                    allocate(Layout::new::<[u8; 0x1000]>(), Protection::ReadWriteExecute), 0, 0x1000,
+                )
+            },
             vmenter: unsafe {
                 allocate(Layout::new::<[u8; 0x1000]>(), Protection::ReadWriteExecute)
             },
@@ -149,7 +173,7 @@ impl Machine {
         let vm_rsp = unsafe {
             machine.cpustack
                 .as_ptr()
-                .add(machine.cpustack.len() - 0x100 - (size_of::<u64>() * 2)) as u64
+                .add(CPU_STACK_OFFSET) as u64
         };
         assert_eq!(vm_rsp % 16, 0);
         a.mov(rsp, Imm64::from(vm_rsp));
@@ -255,36 +279,51 @@ impl Machine {
         value
     }
 
-    /*
     #[allow(clippy::missing_safety_doc)]
     #[no_mangle]
-    #[cfg(feature = "obfuscation")]
-    pub unsafe extern "C" fn run(&mut self, program: *const u8) -> &mut Self {
+    #[cfg(feature = "threaded")]
+    pub unsafe extern "C" fn run(&mut self, program: *const u8) -> *mut Self {
+        use core::arch::asm;
+
         self.pc = program;
         self.sp = self.vmstack
             .add((VM_STACK_SIZE - 0x100 - (size_of::<u64>() * 2)) / size_of::<u64>());
         assert_eq!(self.sp as u64 % 16, 0);
+        let mut handler = self.pc.cast::<u64>().read_unaligned();
+        let current_image_base: u64;
+
+        asm!(
+            "mov {curr_image}, qword ptr gs:[0x60]",
+            "mov {curr_image}, [{curr_image} + 0x10]",
+            curr_image = out(reg) current_image_base,
+        );
+
+        handler += current_image_base;
+
+        self.pc = self.pc.add(size_of::<u64>());
+
+        let first_handler = unsafe {
+            core::mem::transmute::<_, extern "C" fn(*mut Machine) -> *mut Machine>(handler)
+        };
+
+        first_handler(self)
         // maybe this will be called with
         // push first_handler
         // jmp run
         // so run returns to the first handler
         // then make sure rcx is self
-        self
+
     }
-     */
 
     #[allow(clippy::missing_safety_doc)]
     #[no_mangle]
     //#[cfg(feature = "testing")]
+    #[cfg(not(feature = "threaded"))]
     pub unsafe extern "C" fn run(&mut self, program: *const u8) -> &mut Self {
         self.pc = program;
         self.sp = self.vmstack
             .add((VM_STACK_SIZE - 0x100 - (size_of::<u64>() * 2)) / size_of::<u64>());
         assert_eq!(self.sp as u64 % 16, 0);
-
-        let mut instructions = Vec::from_raw_parts(
-            allocate(Layout::new::<[u8; 0x1000]>(), Protection::ReadWriteExecute), 0, 0x1000,
-        );
 
         loop {
             let op = Opcode::try_from(*self.pc).unwrap();
@@ -319,64 +358,13 @@ impl Machine {
                 Opcode::Cmp => handlers::cmp::cmp(self, op_size),
                 Opcode::RotR => handlers::rot::rot_r(self, op_size),
                 Opcode::RotL => handlers::rot::rot_l(self, op_size),
-                Opcode::Jmp => {
-                    let rflags = RFlags::from_bits_truncate(self.rflags);
-                    let do_jmp = match JmpCond::try_from(*self.pc).unwrap() {
-                        JmpCond::Jmp => true,
-                        JmpCond::Je => rflags.contains(RFlags::FLAGS_ZF),
-                        JmpCond::Jne => !rflags.contains(RFlags::FLAGS_ZF),
-                        JmpCond::Jbe => rflags.contains(RFlags::FLAGS_ZF)
-                            || rflags.contains(RFlags::FLAGS_CF),
-                        JmpCond::Ja => !rflags.contains(RFlags::FLAGS_ZF)
-                            && !rflags.contains(RFlags::FLAGS_CF),
-                        JmpCond::Jae => !rflags.contains(RFlags::FLAGS_CF),
-                        JmpCond::Jle => rflags.contains(RFlags::FLAGS_SF)
-                            .bitxor(rflags.contains(RFlags::FLAGS_OF))
-                            || rflags.contains(RFlags::FLAGS_ZF),
-                        JmpCond::Jg => rflags.contains(RFlags::FLAGS_SF)
-                            == rflags.contains(RFlags::FLAGS_OF)
-                            && !rflags.contains(RFlags::FLAGS_ZF)
-                    };
-
-                    self.pc = self.pc.add(1); // skip jmpcond
-
-                    if do_jmp {
-                        // -8 when obfuscated bcuz bytecode offset - 8 = next_handler of
-                        // previous instruction = current handler of target branch
-                        let offset = self.pc.cast::<i64>().read_unaligned();
-                        self.pc = (self.pc.sub(3) as i64).wrapping_sub(offset) as _;
-                    } else {
-                        self.pc = self.pc.add(size_of::<u64>());
-                    }
-                }
-                Opcode::VmAdd => binary_op!(self, wrapping_add),
-                Opcode::VmSub => binary_op!(self, wrapping_sub),
-                Opcode::VmMul => binary_op!(self, wrapping_mul),
-                Opcode::VmReloc => {
-                    let old_image_base = self.pc.cast::<u64>().read_unaligned();
-                    let current_image_base;
-
-                    asm!(
-                    "mov rax, qword ptr gs:[0x60]",
-                    "mov {}, [rax + 0x10]",
-                    out(reg) current_image_base
-                    );
-
-                    let addr = self.stack_pop::<u64>()
-                        .wrapping_add(old_image_base.abs_diff(current_image_base));
-                    self.stack_push::<u64>(addr);
-
-                    self.pc = self.pc.add(op_size as u8 as usize);
-                }
-                Opcode::Vmctx => self.stack_push(self as *const _ as u64),
-                Opcode::VmExec => {
-                    let instr_size = self.pc.read_unaligned() as usize;
-                    self.pc = self.pc.add(1); // skip instr size
-                    reloc_instr(self, self.pc, instr_size, &mut instructions);
-                    instructions.clear();
-
-                    self.pc = self.pc.add(instr_size);
-                }
+                Opcode::Jmp => handlers::jmp::jmp(self, op_size),
+                Opcode::VmAdd => handlers::add::vm_add(self, op_size),
+                Opcode::VmSub => handlers::sub::vm_sub(self, op_size),
+                Opcode::VmMul => handlers::mul::vm_mul(self, op_size),
+                Opcode::VmReloc => handlers::reloc::vm_reloc(self, op_size),
+                Opcode::Vmctx => handlers::ctx::vm_ctx(self, op_size),
+                Opcode::VmExec => handlers::exec::vm_exec(self, op_size),
                 Opcode::VmExit => break,
             }
         }
@@ -384,157 +372,19 @@ impl Machine {
         self
     }
 
-    #[no_mangle]
     #[cfg(not(feature = "testing"))]
-    pub unsafe extern "C" fn dealloc(&mut self) {
+    unsafe extern "C" fn dealloc(&mut self) {
+        use core::ptr::{addr_of_mut, drop_in_place};
         dealloc(self.vmstack.cast(), Layout::new::<[u64; VM_STACK_SIZE]>());
-        dealloc(self.cpustack, Layout::new::<[u8; CPU_STACK_SIZE]>());
+        dealloc(self.cpustack.sub(CPU_STACK_OFFSET).add(size_of::<Machine>()), Layout::new::<[u8; CPU_STACK_SIZE]>());
+        drop_in_place(addr_of_mut!((self).instr_buffer));
+        // rust inlines destructor here deallocating instr_buffer automatically ^-^
     }
-
-    #[inline(always)]
-    pub fn set_rflags(&mut self) {
-        self.rflags = x86::bits64::rflags::read().bits();
-    }
-}
-
-#[inline(never)]
-pub fn reloc_instr(
-    vm: &mut Machine,
-    instr_ptr: *const u8,
-    instr_size: usize,
-    instr_buffer: &mut Vec<u8>,
-) {
-    let mut non_vol_regs: [u64; 9] = [0, 0, 0, 0, 0, 0, 0, 0, 0];
-
-    let non_vol_regmap: &[&Reg64] = &[&rbx, &rsp, &rbp, &rsi, &rdi, &r12, &r13, &r14, &r15];
-
-    let regmap: &[(&Reg64, u8)] = &[
-        (&rax, Register::Rax.into()),
-        (&rbx, Register::Rbx.into()),
-        (&rdx, Register::Rdx.into()),
-        (&rsp, Register::Rsp.into()),
-        (&rbp, Register::Rbp.into()),
-        (&rsi, Register::Rsi.into()),
-        (&rdi, Register::Rdi.into()),
-        (&r8, Register::R8.into()),
-        (&r9, Register::R9.into()),
-        (&r10, Register::R10.into()),
-        (&r11, Register::R11.into()),
-        (&r12, Register::R12.into()),
-        (&r13, Register::R13.into()),
-        (&r14, Register::R14.into()),
-        (&r15, Register::R15.into()),
-        (&rcx, Register::Rcx.into()),
-    ];
-
-    let xmm_regmap: &[(&RegXmm, u8)] = &[
-        (&xmm0, XmmRegister::Xmm0.into()),
-        (&xmm1, XmmRegister::Xmm1.into()),
-        (&xmm2, XmmRegister::Xmm2.into()),
-        (&xmm3, XmmRegister::Xmm3.into()),
-        (&xmm4, XmmRegister::Xmm4.into()),
-        (&xmm5, XmmRegister::Xmm5.into()),
-        (&xmm6, XmmRegister::Xmm6.into()),
-        (&xmm7, XmmRegister::Xmm7.into()),
-        (&xmm8, XmmRegister::Xmm8.into()),
-        (&xmm9, XmmRegister::Xmm9.into()),
-        (&xmm10, XmmRegister::Xmm10.into()),
-        (&xmm11, XmmRegister::Xmm11.into()),
-        (&xmm12, XmmRegister::Xmm12.into()),
-        (&xmm13, XmmRegister::Xmm13.into()),
-        (&xmm14, XmmRegister::Xmm14.into()),
-        (&xmm15, XmmRegister::Xmm15.into()),
-    ];
-
-    let mut asm = Asm::new(instr_buffer);
-
-    for (reg, regid) in xmm_regmap.iter() {
-        let offset = memoffset::offset_of!(Machine, fxsave)
-            + memoffset::offset_of!(XSaveMin, xmm_registers)
-            + *regid as usize * 16;
-        asm.movaps(**reg, assembler::MemOp::IndirectDisp(rcx, offset as i32));
-    }
-
-    for (index, reg) in non_vol_regmap.iter().enumerate() {
-        let offset = index * 8;
-        asm.mov(assembler::MemOp::IndirectDisp(rdx, offset as i32), **reg);
-    }
-
-    asm.mov(rax, MemOp::IndirectDisp(rcx, offset_of!(Machine, rflags) as i32));
-    asm.push(rax);
-    asm.popfq();
-
-    for (reg, regid) in regmap.iter() {
-        let offset = offset_of!(Machine, regs) + *regid as usize * 8;
-        asm.mov(**reg, MemOp::IndirectDisp(rcx, offset as i32));
-    }
-
-    let instructions = unsafe { slice::from_raw_parts(instr_ptr, instr_size) };
-    asm.code().extend_from_slice(instructions);
-
-    asm.push(rax); // this decreases rsp need to adjust
-    asm.mov(rax, Imm64::from(vm as *mut _ as u64));
-
-    let regmap: &[(&Reg64, u8)] = &[
-        (&rbx, Register::Rbx.into()),
-        (&rcx, Register::Rcx.into()),
-        (&rdx, Register::Rdx.into()),
-        (&rbp, Register::Rbp.into()),
-        (&rsi, Register::Rsi.into()),
-        (&rdi, Register::Rdi.into()),
-        (&r8, Register::R8.into()),
-        (&r9, Register::R9.into()),
-        (&r10, Register::R10.into()),
-        (&r11, Register::R11.into()),
-        (&r12, Register::R12.into()),
-        (&r13, Register::R13.into()),
-        (&r14, Register::R14.into()),
-        (&r15, Register::R15.into()),
-    ];
-
-    for (reg, regid) in xmm_regmap.iter() {
-        let offset = memoffset::offset_of!(Machine, fxsave)
-            + memoffset::offset_of!(XSaveMin, xmm_registers)
-            + *regid as usize * 16;
-        asm.movaps(MemOp::IndirectDisp(rax, offset as i32), **reg);
-    }
-
-    for (reg, regid) in regmap.iter() {
-        let offset = offset_of!(Machine, regs) + *regid as usize * 8;
-        asm.mov(MemOp::IndirectDisp(rax, offset as i32), **reg);
-    }
-
-    // save rax too
-    asm.mov(rcx, rax);
-
-    // savef rflags
-    asm.pushfq();
-    asm.pop(rax);
-    asm.mov(MemOp::IndirectDisp(rcx, offset_of!(Machine, rflags) as i32), rax);
-
-    asm.pop(rax);
-    // save rsp after stack ptr is adjusted again
-    asm.mov(MemOp::IndirectDisp(rcx, offset_of!(Machine, regs) as i32 + (Register::Rsp as u8 as usize * 8) as i32), rsp);
-    asm.mov(MemOp::IndirectDisp(rcx, offset_of!(Machine, regs) as i32), rax);
-
-    asm.mov(rax, Imm64::from(non_vol_regs.as_mut_ptr() as u64));
-
-    for (index, reg) in non_vol_regmap.iter().enumerate() {
-        let offset = index * 8;
-        asm.mov(**reg, assembler::MemOp::IndirectDisp(rax, offset as i32));
-    }
-    asm.ret();
-
-    let func = unsafe {
-        core::mem::transmute::<_, extern "C" fn(*mut Machine, *mut u64)>(instr_buffer.as_mut_ptr())
-    };
-    // use non_vol_regs here so no use after free just in case
-    func(vm, non_vol_regs.as_mut_ptr());
 }
 
 #[cfg(feature = "testing")]
 impl Drop for Machine {
     fn drop(&mut self) {
-        unsafe { dealloc(self.vmstack as _, Layout::new::<[u64; VM_STACK_SIZE]>()) }
+        unsafe { dealloc(self.vmstack.cast(), Layout::new::<[u64; VM_STACK_SIZE]>()) };
     }
 }

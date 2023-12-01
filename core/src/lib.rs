@@ -4,6 +4,7 @@ use iced_x86::code_asm::CodeAssembler;
 use include_crypt::{EncryptedFile, include_crypt};
 
 use crate::pe::parser::MapFile;
+use crate::virtualizer::disassembler::convert_to_threaded_code;
 use crate::virtualizer::Virtualizer;
 
 pub mod virtualizer;
@@ -11,14 +12,18 @@ pub mod pe;
 #[path = "../../vm/src/shared.rs"]
 mod shared;
 
-const VM: EncryptedFile = include_crypt!("..\\target\\x86_64-pc-windows-msvc\\release\\vm_build.dll");
+const VM: EncryptedFile =
+    include_crypt!("..\\target\\x86_64-pc-windows-msvc\\release\\vm.dll");
+const VM_THREADED: EncryptedFile =
+    include_crypt!("..\\target\\x86_64-pc-windows-msvc\\release\\vm_threaded.dll");
 
 pub struct Obfuscator {
     pe: VecPE,
     path: String,
     path_out: String,
     map_file: Option<MapFile>,
-    functions: Vec<Routine>
+    obfuscation: bool,
+    functions: Vec<Routine>,
 }
 
 struct Routine {
@@ -31,9 +36,24 @@ struct VirtualizedRoutine {
     bytecode_rva: RVA,
 }
 
+trait PeExt {
+    fn add_section_with_data(&mut self, section: &ImageSectionHeader, data: &[u8])
+        -> Result<ImageSectionHeader, Error>;
+}
+
+impl PeExt for VecPE {
+    fn add_section_with_data(&mut self, section: &ImageSectionHeader, data: &[u8]) -> Result<ImageSectionHeader, Error> {
+        let new_section = *self.append_section(section)?;
+        self.append(data);
+        self.pad_to_alignment().unwrap();
+        self.fix_image_size().unwrap();
+        Ok(new_section)
+    }
+}
+
 impl Obfuscator {
     pub fn new(path: String, path_out: String) -> Result<Obfuscator, exe::Error> {
-        Ok(Self { pe: VecPE::from_disk_file(&path)?, path, path_out, map_file: None, functions: Vec::new() })
+        Ok(Self { pe: VecPE::from_disk_file(&path)?, path, path_out, map_file: None, obfuscation: false, functions: Vec::new() })
     }
 
     /// Path of pe to obfuscate
@@ -46,6 +66,10 @@ impl Obfuscator {
     pub fn with_path_out(mut self, path: String) -> Self {
         self.path = path;
         self
+    }
+
+    pub fn use_obfuscation(&mut self, enable: bool) {
+        self.obfuscation = enable;
     }
 
     pub fn with_map_file(mut self, map_path: String) -> Self {
@@ -70,26 +94,22 @@ impl Obfuscator {
     }
 
     pub fn virtualize(&mut self) -> anyhow::Result<()> {
-        let (bytecode, virtualized_fns) = self.virtualize_fns()?;
+        let mut vm_file = if self.obfuscation {
+            VecPE::from_disk_data(VM_THREADED.decrypt().as_slice())
+        } else {
+            VecPE::from_disk_data(VM.decrypt().as_slice())
+        };
 
-        let mut bytecode_section = ImageSectionHeader::default();
-        bytecode_section.set_name(Some(".byte"));
-        bytecode_section.virtual_size = 0x1000;
-        bytecode_section.size_of_raw_data = bytecode.len() as u32;
-        bytecode_section.characteristics = SectionCharacteristics::MEM_READ;
-
-        let bytecode_section = self.add_section(&bytecode_section, &bytecode).unwrap();
-
-        let mut vm_file = VecPE::from_disk_data(VM.decrypt().as_slice());
+        let vm_file_exports = vm_file.clone();
 
         let export_dir = vm_file.get_data_directory(ImageDirectoryEntry::Export)?;
         // zero out any info about exports after virtualizing
         vm_file.write(
             vm_file.rva_to_offset(export_dir.virtual_address)?.into(),
-            vec![0x00u8; export_dir.size as usize]
+            vec![0x00u8; export_dir.size as usize],
         )?;
 
-        let vm_file_text = vm_file.get_section_by_name(".text").unwrap().clone();
+        let vm_file_text = *vm_file.get_section_by_name(".text").unwrap();
         let machine_entry = vm_file.get_entrypoint().unwrap();
 
         let machine = vm_file.read(vm_file_text.data_offset(self.pe.get_type()), vm_file_text.size_of_raw_data as _)
@@ -103,7 +123,22 @@ impl Obfuscator {
             | SectionCharacteristics::MEM_READ
             | SectionCharacteristics::CNT_CODE;
 
-        let vm_section = self.add_section(&vm_section, &machine.to_vec()).unwrap();
+        let vm_section = self.pe
+            .add_section_with_data(&vm_section, &machine)?;
+
+        let (bytecode, virtualized_fns) = self.virtualize_fns(
+            RVA(vm_section.virtual_address.0 - 0x1000),
+            &vm_file_exports
+        )?;
+
+        let mut bytecode_section = ImageSectionHeader::default();
+        bytecode_section.set_name(Some(".byte"));
+        bytecode_section.virtual_size = bytecode.len() as u32;
+        bytecode_section.size_of_raw_data = bytecode.len() as u32;
+        bytecode_section.characteristics = SectionCharacteristics::MEM_READ;
+
+        let bytecode_section = self.pe
+            .add_section_with_data(&bytecode_section, &bytecode)?;
 
         for function in virtualized_fns.iter() {
             self.patch_fn(
@@ -118,30 +153,32 @@ impl Obfuscator {
         ok()
     }
 
-    fn virtualize_fns(&mut self) -> anyhow::Result<(Vec<u8>, Vec<VirtualizedRoutine>)> {
+    fn virtualize_fns(&mut self, vm_section: RVA, vm: &VecPE) -> anyhow::Result<(Vec<u8>, Vec<VirtualizedRoutine>)> {
         let mut virtualizer = Virtualizer::with_pe(self.pe.clone())?;
         let mut bytecode = Vec::new();
         let mut virtualized_fns = Vec::new();
 
         for function in &self.functions {
             let target_fn_addr = self.pe.rva_to_offset(function.rva).unwrap().0 as _;
+            // todo determine end of function correctly
             let target_function = self.pe.get_slice_ref::<u8>(target_fn_addr, function.len).unwrap();
             let mut virtualized_function = virtualizer.virtualize_with_ip(
                 self.pe.get_image_base().unwrap() + function.rva.0 as u64,
                 target_function,
             )?;
-            // todo if obfuscate
-            // removes opcode
-            // inserts first_handler at start
-            // inserts next_handler at end of every virtual instruction
-            // fixes jmp offsets
-            // jmp offsets should preferably be signed anyways so they can be relative
-            // virtualized_function = disassembler::obfuscate(virtualized_function);
+
             virtualized_fns.push(VirtualizedRoutine {
-                routine: Routine { rva: RVA(function.rva.0 as u32), len: function.len },
+                routine: Routine { rva: RVA(function.rva.0), len: function.len },
                 bytecode_rva: RVA(bytecode.len() as u32),
             });
-            bytecode.append(&mut virtualized_function);
+
+            if self.obfuscation {
+                let mut converted = convert_to_threaded_code(vm, vm_section, virtualized_function.as_slice())?;
+                bytecode.append(&mut converted);
+            } else {
+                bytecode.append(&mut virtualized_function);
+            }
+
             virtualizer.reset();
         }
 
@@ -169,23 +206,6 @@ impl Obfuscator {
         self.pe.fix_image_size().unwrap();
         patch.len()
     }
-
-    // impl those below as traits for VecPE
-
-    fn add_section(&mut self, section: &ImageSectionHeader, data: &Vec<u8>) -> Result<ImageSectionHeader, Error> {
-        let new_section = self.pe.append_section(section)?.clone();
-        self.pe.append(data);
-        self.pe.pad_to_alignment().unwrap();
-        self.pe.fix_image_size().unwrap();
-        Ok(new_section)
-    }
-
-    fn add_data(&mut self, data: &Vec<u8>) {
-        self.pe.append(data);
-        self.pe.pad_to_alignment().unwrap();
-        self.pe.fix_image_size().unwrap();
-    }
-
 
     fn remove_routine(&mut self, routine: Routine) {
         let offset = self.pe.rva_to_offset(routine.rva).unwrap();

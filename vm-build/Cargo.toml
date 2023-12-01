@@ -1,6 +1,6 @@
 [package]
 name = "vm-build"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [lib]
@@ -19,4 +19,5 @@ iced-x86.workspace = true
 
 [features]
 default = []
+threaded = ["guardian-vm/threaded"]
 testing = ["guardian-vm/testing"]

@@ -46,6 +46,7 @@ pub enum OpSize {
 }
 
 #[repr(u8)]
+#[derive(Clone)]
 #[derive(Debug, num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
 pub enum JmpCond {
     Jmp,

@@ -21,30 +21,6 @@ pop     rcx
 // pop     rax
 .endmacro
 
-.macro pushnonvol
-push    rbx
-push    rbp
-push    rsi
-push    rdi
-push    rsp
-push    r12
-push    r13
-push    r14
-push    r15
-.endmacro
-
-.macro popnonvol
-pop     r15
-pop     r14
-pop     r13
-pop     r12
-pop     rsp
-pop     rdi
-pop     rsi
-pop     rbp
-pop     rbx
-.endmacro
-
 fxsave:
     movaps [rcx + {xmm0}], xmm0
     movaps [rcx + {xmm1}], xmm1
@@ -87,11 +63,14 @@ vmentry:
     // avoid new_vm call from changing registers like that
     pushfq // save rflags
     pushvol
-    // +8 to 16 byte align stack here
-    sub rsp, {sizeof_machine} + 8
-    mov rcx, rsp
-    call alloc_vm
-    add rsp, {sizeof_machine} + 8
+    call {alloc_new_stack}
+    add rax, {cpustack_offset}
+    sub rax, {sizeof_machine}
+    mov rcx, rax
+    push rcx
+    call {alloc_vm}
+    pop rax // pop new_rsp into rax
+    mov [rax + {cpustack}], rax
     popvol
     jmp vmenter
 
@@ -126,23 +105,25 @@ vmenter:
     pop rdx
     lea rdx, [rax + rdx]
     // change to new stack
-    mov rax, [rcx + {cpustack}]
-    add rax, {cpustack_offset}
-    mov rsp, rax
+    mov rsp, [rcx + {cpustack}]
     // run(&mut Machine, program);
     call run
     mov rcx, rax
-    jmp vmexit
 
 vmexit:
     // restore old stack
     mov rsp, [rcx + {rsp}]
-    // preserve self ptr
-    push rcx
+    // copy from vm cpu stack to current
+    sub rsp, {sizeof_machine} + 8
+    mov rdx, rcx
+    mov rcx, rsp
+    mov r8, {sizeof_machine}
+    call memcpy
+    mov rcx, rsp
     // dealloc cpu and vmstack
-    call dealloc
+    call {dealloc}
     // restore self ptr
-    pop rcx
+    mov rcx, rsp
     // restore rflags
     mov rax, [rcx + {rflags}]
     push rax
@@ -165,4 +146,5 @@ vmexit:
     mov r14, [rcx + {r14}] // non vol
     mov r15, [rcx + {r15}] // non vol
     mov rcx, [rcx + {rcx}]
+    add rsp, {sizeof_machine} + 8
     ret

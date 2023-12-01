@@ -1,10 +1,10 @@
 use proc_macro::TokenStream;
-use quote::ToTokens;
 
 use syn::{Block, ItemFn};
 
 #[proc_macro_attribute]
 pub fn handler(_attr: TokenStream, fn_ts: TokenStream) -> TokenStream {
+    #[allow(unused_mut)]
     let ItemFn {
         attrs,
         vis,
@@ -57,6 +57,11 @@ pub fn handler(_attr: TokenStream, fn_ts: TokenStream) -> TokenStream {
                         "mov rax, rcx",
                         "mov rcx, rsi",
                         "pop rsi",
+                        "push rcx",
+                        "mov rcx, qword ptr gs:[0x60]",
+                        "mov rcx, [rcx + 0x10]",
+                        "add rax, rcx",
+                        "pop rcx",
                         "jmp rax",
                         ".fill 80, 1, 0xcc", // padding to allow for obfuscation in place
                         sym #ident,

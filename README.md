@@ -12,12 +12,16 @@ This is my x86-64 code virtualizer I decided to open-source, although work will 
 
 ### Vm Features
 - Relocation and execution of any not supported instruction via vmexit and reenter.
+- Direct threaded (optional, 'threaded' feature)
 - Preserves GPRs, RFlags and XMM registers
 - Stack Based using dynamically allocated Virtual Stack
 - Seperate CPU stack to prevent stack corruption
 - Conditional Jumps (although incomplete)
 - Manual calculation of RFLAGs (instead of pushfq)
 - Builds as PIE (position independent executeable)
+
+Known Issues:
+- Need to fix relocations for Dlls
 
 ## Project Overview
 
@@ -116,4 +120,4 @@ for the awesome help and repo this project is based on ^-^
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE), allowing for both personal and commercial use.
+This project is licensed under the [GPL-3.0 License](LICENSE).

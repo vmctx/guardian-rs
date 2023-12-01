@@ -1,8 +1,16 @@
-use core::mem::size_of;
+use core::convert::TryFrom;
+use core::ops::{BitAnd, Shr};
 
-pub fn get_msb<N: num_traits::PrimInt>(n: N) -> N {
-    let shift = size_of::<N>() * 8 - 1;
-    (n >> shift) & N::one()
+fn one<N: TryFrom<u8>>() -> N {
+    1u8.try_into().unwrap_or_else(|_| unreachable!())
+}
+
+pub fn get_msb<N>(n: N) -> N
+    where
+        N: Shr<usize, Output = N> + BitAnd<Output = N> + TryFrom<u8>,
+{
+    let shift = core::mem::size_of::<N>() * 8 - 1;
+    (n >> shift) & one()
 }
 
 macro_rules! calculate_rflags {

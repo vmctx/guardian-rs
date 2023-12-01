@@ -108,6 +108,12 @@ pub struct Virtualizer {
     image_base: u64,
 }
 
+impl Default for Virtualizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Virtualizer {
     pub fn new() -> Self {
         Self {
@@ -394,7 +400,6 @@ impl Virtualizer {
         vmasm_sized!(self, cmp, inst;);
     }
 
-    // seems to be correct
     fn lea(&mut self, inst: &Instruction) {
         vmasm!(self,
             lea_operand, inst;
@@ -403,19 +408,6 @@ impl Virtualizer {
     }
 
     fn ret(&mut self) {
-        /*
-        use iced_x86::Register::RSP;
-
-        vmasm!(self,
-            load_reg RSP;
-            load;
-            load_reg RSP;
-            const_ 8;
-            vmadd;
-            store_reg RSP;
-            vmexit;
-        );
-         */
         vmasm!(self,
             vmexit;
         );
@@ -630,6 +622,19 @@ impl Asm for Virtualizer {
         }
     }
 
+    // used for movzx
+    fn store_reg_zx(&mut self, inst: &Instruction, reg: iced_x86::Register) {
+        self.asm.vmctx();
+        self.asm.const_(reg.reg_offset());
+        self.asm.vmadd();
+
+        match OpSize::try_from(inst).unwrap() {
+            OpSize::Word => self.asm.store_reg_zx::<u16>(),
+            OpSize::Byte => self.asm.store_reg_zx::<u8>(),
+            _ => unreachable!()
+        }
+    }
+
     fn lea_operand(&mut self, inst: &Instruction) {
         if inst.memory_base() != iced_x86::Register::None
             && inst.memory_base() != iced_x86::Register::RIP {
@@ -653,24 +658,8 @@ impl Asm for Virtualizer {
         }
 
         if inst.memory_base() != iced_x86::Register::None
-            || inst.memory_index() != iced_x86::Register::None
-        {
+            || inst.memory_index() != iced_x86::Register::None {
             self.asm.vmadd();
-        }
-    }
-
-    // used for movzx
-    fn store_reg_zx(&mut self, inst: &Instruction, reg: iced_x86::Register) {
-        assert_eq!(reg.is_gpr(), true);
-
-        self.asm.vmctx();
-        self.asm.const_(reg.reg_offset());
-        self.asm.vmadd();
-
-        match OpSize::try_from(inst).unwrap() {
-            OpSize::Word => self.asm.store_reg_zx::<u16>(),
-            OpSize::Byte => self.asm.store_reg_zx::<u8>(),
-            _ => unreachable!()
         }
     }
 }

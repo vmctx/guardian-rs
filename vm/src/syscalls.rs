@@ -1,29 +1,29 @@
 use core::arch::global_asm;
 use core::ffi::c_void;
 
-type ULONG = u32;
-type NTSTATUS = i32;
-type PVOID = *mut c_void;
-type HANDLE = PVOID;
-type PSIZE_T = *mut ULONG_PTR;
-type ULONG_PTR = usize;
+type ULong = u32;
+type NtStatus = i32;
+type PVoid = *mut c_void;
+type Handle = PVoid;
+type PSizeT = *mut ULongPtr;
+type ULongPtr = usize;
 
 // https://j00ru.vexillium.org/syscalls/nt/64/
 extern "C" {
     pub fn NtAllocateVirtualMemory(
-        process_handle: HANDLE,
-        base_address: *mut PVOID,
-        zero_bits: ULONG_PTR,
-        region_size: PSIZE_T,
-        allocation_type: ULONG,
-        protect: ULONG,
-    ) -> NTSTATUS;
+        process_handle: Handle,
+        base_address: *mut PVoid,
+        zero_bits: ULongPtr,
+        region_size: PSizeT,
+        allocation_type: ULong,
+        protect: ULong,
+    ) -> NtStatus;
     pub fn NtFreeVirtualMemory(
-        process_handle: HANDLE,
-        base_address: *mut PVOID,
-        region_size: PSIZE_T,
-        free_type: ULONG,
-    ) -> NTSTATUS;
+        process_handle: Handle,
+        base_address: *mut PVoid,
+        region_size: PSizeT,
+        free_type: ULong,
+    ) -> NtStatus;
 }
 
 global_asm!(

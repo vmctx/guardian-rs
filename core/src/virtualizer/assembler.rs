@@ -123,7 +123,7 @@ impl Assembler {
     pub fn jmp(&mut self, cond: JmpCond, target: u64) {
         self.emit(Opcode::Jmp);
         self.emit_const::<u8>(cond as u8);
-        // could also be u8 or u16
+        // could also be u16
         self.emit_const::<u64>(target);
     }
 

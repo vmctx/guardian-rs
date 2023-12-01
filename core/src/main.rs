@@ -26,7 +26,7 @@ fn main() {
    assert!(!args.functions.is_empty());
 
    if let Err(error) = run_guardian(args) {
-      eprintln!("{}", error.to_string());
+      eprintln!("{}", error);
    }
 }
 

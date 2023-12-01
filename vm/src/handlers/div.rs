@@ -6,7 +6,8 @@ macro_rules! div_save_flags {
 
         let qoutient = op1.wrapping_div(op2);
         let remainder = op1.wrapping_rem(op2);
-        $self.set_rflags();
+        // todo find out what flags are affected (docs say undefined)
+        $crate::calculate_rflags!($self, op1, op2, qoutient, ZF);
 
         unsafe { $self.stack_push(remainder as $bit); }
         unsafe { $self.stack_push(qoutient as $bit); }

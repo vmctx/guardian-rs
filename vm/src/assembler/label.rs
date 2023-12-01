@@ -29,6 +29,12 @@ pub struct Label {
     offsets: HashSet<usize>,
 }
 
+impl Default for Label {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Label {
     /// Create a new `unbound` [Label].
     pub fn new() -> Label {

@@ -67,6 +67,7 @@ fn virtualize_and_run(binary_name: &str, functions: Vec<String>, input: Option<&
         format!("testbins\\{binary_name}\\target\\release\\{binary_name}.exe"),
         format!("testbins\\{binary_name}\\target\\release\\{binary_name}_vrt.exe")
     ).unwrap().with_map_file(format!("testbins\\{binary_name}\\target\\{binary_name}.map"));
+    obfuscator.use_obfuscation(true);
     obfuscator.add_functions(functions).unwrap();
     obfuscator.virtualize().unwrap();
 

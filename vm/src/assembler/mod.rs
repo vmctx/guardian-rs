@@ -67,7 +67,7 @@ impl Asm<'_> {
 
     /// Return a mutable reference to the emitted code
     pub fn code(&mut self) -> &mut Vec<u8> {
-        &mut self.buf
+        self.buf
     }
 
     /// Emit a slice of bytes.

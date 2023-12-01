@@ -1,24 +1,34 @@
 [env]
 DEBUG_PATH = "target/x86_64-pc-windows-msvc/debug"
-RELEASE_PATH = "target/x86_64-pc-windows-msvc/release"
+RELEASE_PATH = "target\\x86_64-pc-windows-msvc\\release"
 
 [config]
 default_to_workspace = false
 
 [tasks.build]
-dependencies = ["vm"]
+dependencies = ["vm", "threaded-vm"]
+command = "cargo"
+args = ["build", "--package", "guardian"]
 
 [tasks.vm]
 script = [
     "cd vm-build",
     "%HOMEDRIVE%/%HOMEPATH%/.cargo/bin/cargo.exe +nightly b --release --target x86_64-pc-windows-msvc",
+    "move \"..\\%RELEASE_PATH%\\vm_build.dll\" \"..\\%RELEASE_PATH%\\vm.dll\""
+]
+
+[tasks.threaded-vm]
+script = [
+    "cd vm-build",
+    "%HOMEDRIVE%/%HOMEPATH%/.cargo/bin/cargo.exe +nightly b --release --target x86_64-pc-windows-msvc --features threaded",
+    "move \"..\\%RELEASE_PATH%\\vm_build.dll\" \"..\\%RELEASE_PATH%\\vm_threaded.dll\""
 ]
 
 [tasks.test]
-dependencies = ["vm"]
+dependencies = ["vm", "threaded-vm"]
 toolchain = "nightly"
 command = "cargo"
 # args = ["test", "--all-features"]
-args = ["test", "--all-features"]
+args = ["test", "--features",  "testing"]
 # "--", "--test-threads=1"
 install_crate = false
