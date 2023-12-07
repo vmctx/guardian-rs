@@ -553,6 +553,8 @@ impl Asm for Virtualizer {
             _ => panic!("unsupported operand: {:?}", inst.op_kind(operand)),
         }
 
+        // todo segments: fs, gs etc..
+
         if inst.op_kind(operand) != OpKind::Memory && inst.has_reloc_entry(self.pe.as_ref()) {
             self.asm.vmreloc(self.image_base);
         }
@@ -636,6 +638,9 @@ impl Asm for Virtualizer {
     }
 
     fn lea_operand(&mut self, inst: &Instruction) {
+        // unsupported for now
+        assert!(!inst.has_segment_prefix());
+
         if inst.memory_base() != iced_x86::Register::None
             && inst.memory_base() != iced_x86::Register::RIP {
             self.load_reg(inst.memory_base());

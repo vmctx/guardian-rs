@@ -298,6 +298,19 @@ mod tests {
 
     #[test]
     #[cfg(target_env = "msvc")]
+    #[should_panic]
+    fn virtualize_module_base() {
+        // unsupported for now, should return error
+        use iced_x86::code_asm::*;
+        let mut a = CodeAssembler::new(64).unwrap();
+        a.mov(rax, qword_ptr(0x60).gs()).unwrap();
+        a.mov(rax, qword_ptr(rax + 0x10i32)).unwrap();
+        a.ret().unwrap();
+        virtualize(&a.assemble(0).unwrap()).unwrap();
+    }
+
+    #[test]
+    #[cfg(target_env = "msvc")]
     fn virtualize_push_pop() {
         use iced_x86::code_asm::*;
         let mut a = CodeAssembler::new(64).unwrap();
