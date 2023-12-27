@@ -20,9 +20,8 @@ trait Asm {
     fn sub<T: OpSized>(&mut self);
     fn div<T: OpSized>(&mut self, signed: bool);
     fn shr<T: OpSized>(&mut self);
-    fn combine<T: OpSized>(&mut self);
-    fn split<T: OpSized>(&mut self);
     fn mul<T: OpSized>(&mut self);
+    fn imul<T: OpSized>(&mut self);
     fn and<T: OpSized>(&mut self);
     fn or<T: OpSized>(&mut self);
     fn xor<T: OpSized>(&mut self);
@@ -283,7 +282,6 @@ impl Virtualizer {
             OpSize::Word => vmasm!(self,
                 load_reg, DX;
                 load_reg, AX;
-                combine::<u16>;
                 load_operand, inst, 0;
                 div::<u16>, signed;
                 store_reg, AX;
@@ -292,7 +290,6 @@ impl Virtualizer {
             OpSize::Dword => vmasm!(self,
                 load_reg, EDX;
                 load_reg, EAX;
-                combine::<u32>;
                 load_operand, inst, 0;
                 div::<u32>, signed;
                 store_reg, EAX;
@@ -301,7 +298,6 @@ impl Virtualizer {
             OpSize::Qword => vmasm!(self,
                 load_reg, RDX;
                 load_reg, RAX;
-                combine::<u64>;
                 load_operand, inst, 0;
                 div::<u64>, signed;
                 store_reg, RAX;
@@ -335,7 +331,6 @@ impl Virtualizer {
                 load_reg, AX;
                 load_operand, inst, 0;
                 mul::<u16>;
-                split::<u16>;
                 store_reg, AX;
                 store_reg, DX;
             ),
@@ -343,7 +338,6 @@ impl Virtualizer {
                 load_reg, EAX;
                 load_operand, inst, 0;
                 mul::<u32>;
-                split::<u32>;
                 store_reg, EAX;
                 store_reg, EDX;
             ),
@@ -351,7 +345,6 @@ impl Virtualizer {
                 load_reg, RAX;
                 load_operand, inst, 0;
                 mul::<u64>;
-                split::<u32>;
                 store_reg, RAX;
                 store_reg, RDX;
             )
@@ -360,14 +353,16 @@ impl Virtualizer {
 
     fn imul(&mut self, inst: &Instruction) {
         match inst.op_count() {
+            // one operand form behaves exactly like mul
             1 => self.mul(inst),
-            2 => binary_op!(self, inst, mul),
+            // imul truncates, so dont push double the OpSize
+            2 => binary_op!(self, inst, imul),
             3 => {
                 vmasm!(self,
                     load_operand, inst, 1;
                     load_operand, inst, 2;
                 );
-                vmasm_sized!(self, mul, inst;);
+                vmasm_sized!(self, imul, inst;);
                 vmasm!(self, store_operand, inst, 0;);
             }
             _ => unreachable!()
@@ -483,16 +478,12 @@ impl Asm for Virtualizer {
         self.asm.shr::<T>();
     }
 
-    fn combine<T: OpSized>(&mut self) {
-        self.asm.combine::<T>();
-    }
-
-    fn split<T: OpSized>(&mut self) {
-        self.asm.split::<T>();
-    }
-
     fn mul<T: OpSized>(&mut self) {
         self.asm.mul::<T>();
+    }
+
+    fn imul<T: OpSized>(&mut self) {
+        self.asm.imul::<T>();
     }
 
     fn and<T: OpSized>(&mut self) {

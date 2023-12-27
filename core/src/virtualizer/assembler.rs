@@ -88,16 +88,12 @@ impl Assembler {
         self.emit_sized::<T>(Opcode::Shr);
     }
 
-    pub fn combine<T: OpSized>(&mut self) {
-        self.emit_sized::<T>(Opcode::Combine);
-    }
-
-    pub fn split<T: OpSized>(&mut self) {
-        self.emit_sized::<T>(Opcode::Split);
-    }
-
     pub fn mul<T: OpSized>(&mut self) {
         self.emit_sized::<T>(Opcode::Mul);
+    }
+
+    pub fn imul<T: OpSized>(&mut self) {
+        self.emit_sized::<T>(Opcode::IMul);
     }
 
     pub fn and<T: OpSized>(&mut self) {

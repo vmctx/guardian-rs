@@ -11,8 +11,6 @@ pub mod xor;
 pub mod not;
 pub mod div;
 pub mod rot;
-pub mod comb;
-pub mod split;
 pub mod jmp;
 pub mod reloc;
 pub mod ctx;

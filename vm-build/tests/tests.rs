@@ -265,7 +265,7 @@ mod tests {
         let mut a = CodeAssembler::new(64).unwrap();
         let mut higher_bits = 0u32;
         a.mov(eax, 3).unwrap();
-        a.mul(rcx).unwrap();
+        a.mul(ecx).unwrap();
         a.mov(r8, &mut higher_bits as *mut _ as u64).unwrap();
         a.mov(dword_ptr(r8), edx).unwrap();
         a.ret().unwrap();

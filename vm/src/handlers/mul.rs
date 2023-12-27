@@ -27,6 +27,16 @@ pub fn mul(vm: &mut Machine, op_size: OpSize) {
 }
 
 #[handler]
+pub fn imul(vm: &mut Machine, op_size: OpSize) {
+    match op_size {
+        OpSize::Qword => mul_save_flags!(vm, u64, u64),
+        OpSize::Dword => mul_save_flags!(vm, u32, u32),
+        OpSize::Word => mul_save_flags!(vm, u16, u16),
+        OpSize::Byte => mul_save_flags!(vm, u16, u16),
+    }
+}
+
+#[handler]
 pub fn vm_mul(vm: &mut Machine, _op_size: OpSize) {
     binary_op!(vm, wrapping_mul)
 }

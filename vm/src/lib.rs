@@ -346,9 +346,8 @@ impl Machine {
                 Opcode::Div => handlers::div::div(self, op_size),
                 Opcode::IDiv => handlers::div::idiv(self, op_size),
                 Opcode::Shr => handlers::div::shr(self, op_size), // possibly unfinished
-                Opcode::Combine => handlers::comb::combine(self, op_size),
-                Opcode::Split => handlers::split::split(self, op_size),
                 Opcode::Mul => handlers::mul::mul(self, op_size),
+                Opcode::IMul => handlers::mul::imul(self, op_size),
                 Opcode::Add => handlers::add::add(self, op_size),
                 Opcode::Sub => handlers::sub::sub(self, op_size),
                 Opcode::And => handlers::and::and(self, op_size),
