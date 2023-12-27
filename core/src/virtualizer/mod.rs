@@ -660,9 +660,7 @@ impl Asm for Virtualizer {
 
         if inst.memory_base() == iced_x86::Register::RIP {
             self.asm.vmreloc(self.image_base);
-        }
-
-        if inst.memory_base() != iced_x86::Register::None
+        } else if inst.memory_base() != iced_x86::Register::None
             || inst.memory_index() != iced_x86::Register::None {
             self.asm.vmadd();
         }
