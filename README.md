@@ -22,6 +22,7 @@ This is my x86-64 code virtualizer I decided to open-source, although work will 
 
 Known Issues:
 - Need to fix relocations for Dlls
+Since there is a bug in the library im using it seems (exe-rs) I have partially ported to using the object crate to support virtualization of dlls in my private version. I will probably bring this over to the public version soon.
 
 ## Project Overview
 
