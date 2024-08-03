@@ -111,7 +111,7 @@ Options:
 ## Contributing
 
 If you're interested in improving the project feel free to create a PR
-and if you have any questions u can contact me on discord [@felixfem](https://discordapp.com/users/660564083355156504)
+and if you have any questions u can contact me on discord [@vmexec](https://discordapp.com/users/660564083355156504)
 
 ## Credits
 - [cursey/x64-virtualizer-rs](https://github.com/cursey/x64-virtualizer-rs)
