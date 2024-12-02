@@ -3,7 +3,8 @@
 # guardian-rs
 This is my x86-64 code virtualizer I decided to open-source, although work will continue mostly on a private version, im open to [contributions and questions](#contributing)!
 
-32-bit support probably soon :3
+### Update
+after working on the private version for several months there were some critical bugs i discovered and fixed, however due to the private version being basically a complete rewrite im fairly certain i will *not* update this repo, if you encounter any problems, you can make a pull request with a fix. for anyone that wants to make their own virtualizer i recommend to instead go down the path of jit assembling the vm at protection time via something like [icedx86](https://docs.rs/iced-x86/latest/iced_x86/)
 
 ### Obfuscator Features
 - Virtualization of functions within a binary given a .map file
